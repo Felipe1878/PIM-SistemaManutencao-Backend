@@ -12,12 +12,15 @@ public class OrdemServicoService(AppDbContext db)
 {
     public async Task<OrdemServico> CriarAsync(CriarOrdemServicoDto dto)
     {
-        if (!Enum.IsDefined(dto.TipoManutencao))
+        // Seam de compilação (SUB A): DTO com enum anulável exige null-guard defensivo.
+        if (dto.TipoManutencao is null)
+            throw new RegraNegocioException(400, "Informe o tipo de manutenção.");
+        if (!Enum.IsDefined(dto.TipoManutencao.Value))
             throw new RegraNegocioException(400, "Tipo de manutenção inválido.");
         await using var transacao = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
-        var os = new OrdemServico { TipoManutencao = dto.TipoManutencao,
+        var os = new OrdemServico { TipoManutencao = dto.TipoManutencao.Value,
             Status = StatusOrdemServico.Aberta, DataAbertura = DateTime.UtcNow };
-        if (dto.TipoManutencao == TipoManutencao.Corretiva)
+        if (dto.TipoManutencao.Value == TipoManutencao.Corretiva)
         {
             if (dto.OcorrenciaId is null || dto.PlanoManutencaoId is not null)
                 throw new RegraNegocioException(400, "OS corretiva exige ocorrenciaId e não aceita planoManutencaoId.");

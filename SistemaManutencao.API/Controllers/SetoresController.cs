@@ -12,10 +12,16 @@ namespace SistemaManutencao.API.Controllers;
 public class SetoresController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Listar([FromQuery] bool incluirInativos = false)
         => Ok(await db.Setores.AsNoTracking().Where(x => incluirInativos || x.Ativo).OrderBy(x => x.Nome).ToListAsync());
 
     [HttpGet("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Obter(int id)
     {
         var setor = await db.Setores.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
@@ -23,6 +29,11 @@ public class SetoresController(AppDbContext db) : ControllerBase
     }
 
     [Authorize(Roles = "Administrador"), HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Criar([FromBody] SetorDto dto)
     {
         var nome = dto.Nome.Trim();
@@ -34,6 +45,12 @@ public class SetoresController(AppDbContext db) : ControllerBase
     }
 
     [Authorize(Roles = "Administrador"), HttpPut("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Atualizar(int id, [FromBody] SetorDto dto)
     {
         var setor = await db.Setores.FindAsync(id);
@@ -45,6 +62,11 @@ public class SetoresController(AppDbContext db) : ControllerBase
     }
 
     [Authorize(Roles = "Administrador"), HttpPatch("{id:int}/inativar")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Inativar(int id)
     {
         var setor = await db.Setores.FindAsync(id);

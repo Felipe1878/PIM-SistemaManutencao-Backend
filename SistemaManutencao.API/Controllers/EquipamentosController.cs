@@ -13,6 +13,9 @@ namespace SistemaManutencao.API.Controllers;
 public class EquipamentosController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Listar([FromQuery] string? busca = null, [FromQuery] bool incluirInativos = false)
     {
         var q = db.Equipamentos.AsNoTracking().AsQueryable();
@@ -24,6 +27,9 @@ public class EquipamentosController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Obter(int id)
     {
         var e = await db.Equipamentos.AsNoTracking().Where(x => x.Id == id)
@@ -34,6 +40,11 @@ public class EquipamentosController(AppDbContext db) : ControllerBase
     }
 
     [Authorize(Roles = "Administrador"), HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Criar([FromBody] EquipamentoDto dto)
     {
         await ValidarAsync(dto, null);
@@ -44,6 +55,12 @@ public class EquipamentosController(AppDbContext db) : ControllerBase
     }
 
     [Authorize(Roles = "Administrador"), HttpPut("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Atualizar(int id, [FromBody] EquipamentoDto dto)
     {
         var e = await db.Equipamentos.FindAsync(id);
@@ -53,6 +70,11 @@ public class EquipamentosController(AppDbContext db) : ControllerBase
     }
 
     [Authorize(Roles = "Administrador"), HttpPatch("{id:int}/inativar")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Inativar(int id)
     {
         var e = await db.Equipamentos.FindAsync(id);

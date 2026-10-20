@@ -10,6 +10,9 @@ namespace SistemaManutencao.API.Controllers;
 public class DashboardController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Resumo() => Ok(new
     {
         equipamentos = new {

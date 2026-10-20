@@ -14,6 +14,10 @@ namespace SistemaManutencao.API.Controllers;
 public class UsuariosController(AppDbContext db, IPasswordHasher<Usuario> hasher) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Listar([FromQuery] bool incluirInativos = false)
     {
         var usuarios = await db.Usuarios.AsNoTracking().Where(x => incluirInativos || x.Ativo)
@@ -22,6 +26,10 @@ public class UsuariosController(AppDbContext db, IPasswordHasher<Usuario> hasher
     }
 
     [HttpGet("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Obter(int id)
     {
         var u = await db.Usuarios.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
@@ -29,14 +37,19 @@ public class UsuariosController(AppDbContext db, IPasswordHasher<Usuario> hasher
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Criar([FromBody] CriarUsuarioDto dto)
     {
-        ValidarPerfil(dto.Perfil, dto.Funcao);
+        var perfil = ValidarPerfil(dto.Perfil, dto.Funcao);
         var email = dto.Email.Trim().ToLowerInvariant();
         if (await db.Usuarios.AnyAsync(x => x.Email == email))
             throw new RegraNegocioException(409, "Email já cadastrado.");
-        var u = new Usuario { Nome = dto.Nome.Trim(), Email = email, Perfil = dto.Perfil,
-            Funcao = dto.Perfil == PerfilUsuario.Administrador ? null : dto.Funcao };
+        var u = new Usuario { Nome = dto.Nome.Trim(), Email = email, Perfil = perfil,
+            Funcao = perfil == PerfilUsuario.Administrador ? null : dto.Funcao };
         u.SenhaHash = hasher.HashPassword(u, dto.Senha);
         db.Usuarios.Add(u);
         await db.SaveChangesAsync();
@@ -44,22 +57,33 @@ public class UsuariosController(AppDbContext db, IPasswordHasher<Usuario> hasher
     }
 
     [HttpPut("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Atualizar(int id, [FromBody] AtualizarUsuarioDto dto)
     {
-        ValidarPerfil(dto.Perfil, dto.Funcao);
+        var perfil = ValidarPerfil(dto.Perfil, dto.Funcao);
         var u = await db.Usuarios.FindAsync(id);
         if (u is null) return NotFound();
-        if (u.Funcao == FuncaoFuncionario.Tecnico && (dto.Perfil != PerfilUsuario.Funcionario || dto.Funcao != FuncaoFuncionario.Tecnico) &&
+        if (u.Funcao == FuncaoFuncionario.Tecnico && (perfil != PerfilUsuario.Funcionario || dto.Funcao != FuncaoFuncionario.Tecnico) &&
             await db.OrdensServicos.AnyAsync(x => x.TecnicoId == id &&
                 (x.Status == StatusOrdemServico.Aberta || x.Status == StatusOrdemServico.EmAtendimento)))
             throw new RegraNegocioException(409, "Técnico possui OS pendente; conclua ou transfira antes de alterar a função.");
-        u.Nome = dto.Nome.Trim(); u.Perfil = dto.Perfil;
-        u.Funcao = dto.Perfil == PerfilUsuario.Administrador ? null : dto.Funcao;
+        u.Nome = dto.Nome.Trim(); u.Perfil = perfil;
+        u.Funcao = perfil == PerfilUsuario.Administrador ? null : dto.Funcao;
         await db.SaveChangesAsync();
         return Ok(UsuarioResposta.De(u));
     }
 
     [HttpPatch("{id:int}/inativar")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Inativar(int id)
     {
         if (UsuarioLogado.Id(User) == id)
@@ -74,12 +98,17 @@ public class UsuariosController(AppDbContext db, IPasswordHasher<Usuario> hasher
         return Ok(UsuarioResposta.De(u));
     }
 
-    private static void ValidarPerfil(PerfilUsuario perfil, FuncaoFuncionario? funcao)
+    // Perfil agora é anulável no DTO (elimina o default silencioso Administrador = 0):
+    // omissão/null no JSON é barrada pelo ModelState com 400 automático ([Required] em Nullable);
+    // o guard abaixo é defensivo para chamadas diretas ao método.
+    private static PerfilUsuario ValidarPerfil(PerfilUsuario? perfil, FuncaoFuncionario? funcao)
     {
-        if (!Enum.IsDefined(perfil)) throw new RegraNegocioException(400, "Perfil inválido.");
-        if (perfil == PerfilUsuario.Funcionario && (funcao is null || !Enum.IsDefined(funcao.Value)))
-            throw new RegraNegocioException(400, "Funcionário exige função Operador ou Tecnico.");
-        if (perfil == PerfilUsuario.Administrador && funcao is not null)
+        if (perfil is null) throw new RegraNegocioException(400, "Informe o perfil.");
+        if (!Enum.IsDefined(perfil.Value)) throw new RegraNegocioException(400, "Perfil inválido.");
+        if (perfil.Value == PerfilUsuario.Funcionario && (funcao is null || !Enum.IsDefined(funcao.Value)))
+            throw new RegraNegocioException(400, "Funcionário exige função Operador ou Técnico.");
+        if (perfil.Value == PerfilUsuario.Administrador && funcao is not null)
             throw new RegraNegocioException(400, "Administrador não deve possuir função de funcionário.");
+        return perfil.Value;
     }
 }

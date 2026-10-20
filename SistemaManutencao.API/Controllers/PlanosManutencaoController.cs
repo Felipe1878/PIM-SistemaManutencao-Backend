@@ -11,7 +11,11 @@ namespace SistemaManutencao.API.Controllers;
 [ApiController, Authorize, Route("api/planos-manutencao")]
 public class PlanosManutencaoController(AppDbContext db) : ControllerBase
 {
-    [HttpGet]
+    [Authorize(Roles = "Administrador"), HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Listar([FromQuery] bool incluirInativos = false, [FromQuery] bool somenteVencidos = false)
     {
         var q = db.PlanosManutencao.AsNoTracking().AsQueryable();
@@ -19,13 +23,21 @@ public class PlanosManutencaoController(AppDbContext db) : ControllerBase
         if (somenteVencidos) q = q.Where(x => x.Ativo && x.ProximaExecucao <= DateTime.UtcNow);
         return Ok(await q.OrderBy(x => x.ProximaExecucao).ToListAsync());
     }
-    [HttpGet("{id:int}")]
+    [Authorize(Roles = "Administrador"), HttpGet("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Obter(int id)
     {
         var p = await db.PlanosManutencao.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id);
         return p is null ? NotFound() : Ok(p);
     }
     [Authorize(Roles = "Administrador"), HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Criar([FromBody] PlanoManutencaoDto dto)
     {
         await ValidarAsync(dto);
@@ -34,6 +46,11 @@ public class PlanosManutencaoController(AppDbContext db) : ControllerBase
         return CreatedAtAction(nameof(Obter), new { id = p.Id }, p);
     }
     [Authorize(Roles = "Administrador"), HttpPut("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Atualizar(int id, [FromBody] PlanoManutencaoDto dto)
     {
         var p = await db.PlanosManutencao.FindAsync(id);
@@ -42,6 +59,10 @@ public class PlanosManutencaoController(AppDbContext db) : ControllerBase
         await db.SaveChangesAsync(); return Ok(p);
     }
     [Authorize(Roles = "Administrador"), HttpPatch("{id:int}/inativar")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Inativar(int id)
     {
         var p = await db.PlanosManutencao.FindAsync(id);

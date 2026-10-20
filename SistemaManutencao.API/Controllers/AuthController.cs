@@ -12,9 +12,14 @@ namespace SistemaManutencao.API.Controllers;
 public class AuthController(AuthService auth, AppDbContext db) : ControllerBase
 {
     [AllowAnonymous, HttpPost("login")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginDto dto) => Ok(await auth.LoginAsync(dto));
 
     [Authorize, HttpGet("me")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Me()
     {
         var u = await db.Usuarios.AsNoTracking().SingleOrDefaultAsync(x => x.Id == UsuarioLogado.Id(User) && x.Ativo);

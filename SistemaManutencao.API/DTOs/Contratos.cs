@@ -14,13 +14,13 @@ public class CriarUsuarioDto
     [Required, StringLength(120, MinimumLength = 2)] public string Nome { get; set; } = "";
     [Required, EmailAddress, StringLength(180)] public string Email { get; set; } = "";
     [Required, MinLength(8), MaxLength(128)] public string Senha { get; set; } = "";
-    [Required] public PerfilUsuario Perfil { get; set; }
+    [Required] public PerfilUsuario? Perfil { get; set; }
     public FuncaoFuncionario? Funcao { get; set; }
 }
 public class AtualizarUsuarioDto
 {
     [Required, StringLength(120, MinimumLength = 2)] public string Nome { get; set; } = "";
-    [Required] public PerfilUsuario Perfil { get; set; }
+    [Required] public PerfilUsuario? Perfil { get; set; }
     public FuncaoFuncionario? Funcao { get; set; }
 }
 public record UsuarioResposta(int Id, string Nome, string Email, PerfilUsuario Perfil, FuncaoFuncionario? Funcao, bool Ativo)
@@ -45,11 +45,11 @@ public class CriarOcorrenciaDto
 {
     [Range(1, int.MaxValue)] public int EquipamentoId { get; set; }
     [Required, StringLength(2000, MinimumLength = 5)] public string Descricao { get; set; } = "";
-    [Required] public PrioridadeOcorrencia Prioridade { get; set; }
+    [Required] public PrioridadeOcorrencia? Prioridade { get; set; }
 }
 public class CriarOrdemServicoDto
 {
-    [Required] public TipoManutencao TipoManutencao { get; set; }
+    [Required] public TipoManutencao? TipoManutencao { get; set; }
     public int? OcorrenciaId { get; set; }
     public int? PlanoManutencaoId { get; set; }
 }
