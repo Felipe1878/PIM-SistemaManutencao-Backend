@@ -1,7 +1,11 @@
 # Contratos da API para React e Flutter
 
 URL padrão em desenvolvimento: `http://localhost:5088`. Documentação Swagger: `/swagger`.
-As respostas usam JSON e propriedades em `camelCase`. Os enums são representados como textos (`"Aberta"`, `"Parado"`, `"Tecnico"`); acentos foram removidos apenas nos identificadores de código. Use `Authorization: Bearer <token>` nos endpoints protegidos.
+As respostas usam JSON e propriedades em `camelCase`. Os enums são representados como textos (`"Aberta"`, `"Parado"`, `"Tecnico"`); acentos foram removidos apenas nos identificadores de código. Use `Authorization: Bearer *** nos endpoints protegidos.
+
+**Campos obrigatórios (enum):** `perfil` (POST/PUT `/api/usuarios`), `prioridade` (POST `/api/ocorrencias`) e `tipoManutencao` (POST `/api/ordens-servico`) são obrigatórios — omissão ou `null` devolve `400` com detalhe por campo. Nunca omita esses campos (historicamente, a omissão de `perfil` criava silenciosamente um Administrador).
+
+**CORS:** em Development a API libera as origens `http://localhost:3000`, `http://localhost:5173` e `http://localhost:8080` (config `Cors:Origens` em `appsettings.Development.json`); em produção configure `Cors:Origens` com as origens reais — sem a chave, nenhuma origem é liberada.
 
 | Método | Endpoint | Quem usa | Função |
 |---|---|---|---|
@@ -22,12 +26,13 @@ As respostas usam JSON e propriedades em `camelCase`. Os enums são representado
 | POST | `/api/equipamentos` | Admin | Cadastro |
 | PUT | `/api/equipamentos/{id}` | Admin | Atualiza dados, não muda status |
 | PATCH | `/api/equipamentos/{id}/inativar` | Admin | Inativa |
-| GET | `/api/ocorrencias` | Logados | Lista e filtro equipamentoId |
-| GET | `/api/ocorrencias/{id}` | Logados | Consulta |
+| GET | `/api/ocorrencias` | Admin/Operador | Lista; filtros combináveis: `equipamentoId`, `busca` (texto na descrição ou nome do equipamento), `status` |
+| GET | `/api/ocorrencias/minhas` | Admin/Operador | Ocorrências registradas pelo usuário logado (tela inicial do Operador no mobile) |
+| GET | `/api/ocorrencias/{id}` | Admin/Operador | Consulta |
 | POST | `/api/ocorrencias` | Admin/Operador | Registra ocorrência e para equipamento |
-| GET | `/api/ordens-servico` | Logados | Lista, filtro status |
-| GET | `/api/ordens-servico/{id}` | Logados | Detalhes e manutenção |
-| GET | `/api/ordens-servico/disponiveis` | Logados | OS sem técnico |
+| GET | `/api/ordens-servico` | Admin/Técnico | Lista, filtro status |
+| GET | `/api/ordens-servico/{id}` | Admin/Técnico | Detalhes e manutenção |
+| GET | `/api/ordens-servico/disponiveis` | Admin/Técnico | OS sem técnico |
 | GET | `/api/ordens-servico/minhas` | Técnico | OS assumidas |
 | POST | `/api/ordens-servico` | Admin | Cria corretiva ou preventiva manual |
 | POST | `/api/ordens-servico/{id}/assumir` | Técnico | Reserva a OS |
@@ -35,8 +40,8 @@ As respostas usam JSON e propriedades em `camelCase`. Os enums são representado
 | PUT | `/api/ordens-servico/{id}/manutencao` | Técnico | Registra diagnóstico e serviço durante atendimento |
 | POST | `/api/ordens-servico/{id}/concluir` | Técnico | Registra diagnóstico e fecha OS |
 | POST | `/api/ordens-servico/{id}/cancelar` | Admin | Cancela OS aberta |
-| GET | `/api/planos-manutencao` | Logados | Lista; `somenteVencidos=true` |
-| GET | `/api/planos-manutencao/{id}` | Logados | Consulta |
+| GET | `/api/planos-manutencao` | Admin | Lista; `somenteVencidos=true` |
+| GET | `/api/planos-manutencao/{id}` | Admin | Consulta |
 | POST | `/api/planos-manutencao` | Admin | Cadastro |
 | PUT | `/api/planos-manutencao/{id}` | Admin | Atualização |
 | PATCH | `/api/planos-manutencao/{id}/inativar` | Admin | Inativa |
@@ -93,3 +98,5 @@ Plano preventivo (Admin): `POST /api/planos-manutencao`
 - `404`: identificador não encontrado.
 - `409`: operação em conflito com outra ocorrência/OS, estado, nome ou patrimônio duplicado.
 - `500`: erro inesperado. Detalhes ficam nos logs, não são exibidos para o usuário.
+
+**Formato dos erros:** negócio, `401` e `403` usam o envelope `{"erro":"mensagem"}` (inclusive corpos de 401/403 do middleware JWT). Erros de validação de modelo (`400`) usam `ValidationProblemDetails` com o dicionário `errors` por campo — trate ambos no cliente.

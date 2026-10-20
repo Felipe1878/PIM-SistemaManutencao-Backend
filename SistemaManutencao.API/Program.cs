@@ -51,10 +51,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
                 ? "Administrador" : atual?.Funcao?.ToString();
             if (atual is null || context.Principal?.FindFirstValue(ClaimTypes.Role) != papelAtual)
                 context.Fail("Usuário inativo ou permissões alteradas. Faça login novamente.");
+        },
+        // 401/403 passam a ter corpo {erro} no mesmo envelope dos demais erros de negócio (antes: corpo vazio).
+        OnChallenge = context =>
+        {
+            context.HandleResponse();
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return context.Response.WriteAsJsonAsync(new
+                { erro = "Autenticação necessária: token ausente, inválido ou expirado. Faça login novamente." });
+        },
+        OnForbidden = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return context.Response.WriteAsJsonAsync(new { erro = "Você não possui permissão para realizar esta ação." });
         }
     };
 });
 builder.Services.AddAuthorization();
+// CORS para o React no browser (Flutter não é afetado — CORS é mecanismo de browser).
+// Origens permitidas vêm de "Cors:Origens" na configuração; sem origens configuradas, nada é liberado.
+var origensCors = builder.Configuration.GetSection("Cors:Origens").Get<string[]>() ?? Array.Empty<string>();
+builder.Services.AddCors(o => o.AddPolicy("Frontends",
+    p => p.WithOrigins(origensCors).AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -109,6 +127,8 @@ if (app.Environment.IsDevelopment())
         await DbInitializer.CriarAdministradorInicialAsync(db, builder.Configuration, hasher);
     }
 }
+// CORS antes da autenticação para que requisições preflight (OPTIONS) não sejam bloqueadas.
+app.UseCors("Frontends");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
