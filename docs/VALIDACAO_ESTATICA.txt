@@ -1,3 +1,6 @@
+REGISTRO HISTÓRICO DO PACOTE ORIGINAL — não representa a validação atual.
+Consulte README.md para build, testes e validações SQL Server posteriores.
+
 VERIFICAÇÃO DO PACOTE — 19/10/2026
 
 OK: JSON de configuração, launchSettings e coleção Postman legíveis

@@ -56,6 +56,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         OnChallenge = context =>
         {
             context.HandleResponse();
+            context.Response.Headers.WWWAuthenticate = "Bearer";
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return context.Response.WriteAsJsonAsync(new
                 { erro = "Autenticação necessária: token ausente, inválido ou expirado. Faça login novamente." });
@@ -76,6 +77,7 @@ builder.Services.AddCors(o => o.AddPolicy("Frontends",
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
+    c.OperationFilter<ErrosHttpOperationFilter>();
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Sistema de Manutenção - PIM", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {

@@ -1,7 +1,7 @@
 # Contratos da API para React e Flutter
 
 URL padrão em desenvolvimento: `http://localhost:5088`. Documentação Swagger: `/swagger`.
-As respostas usam JSON e propriedades em `camelCase`. Os enums são representados como textos (`"Aberta"`, `"Parado"`, `"Tecnico"`); acentos foram removidos apenas nos identificadores de código. Use `Authorization: Bearer *** nos endpoints protegidos.
+As respostas usam JSON e propriedades em `camelCase`. Os enums são representados como textos (`"Aberta"`, `"Parado"`, `"Tecnico"`); acentos foram removidos apenas nos identificadores de código. Use `Authorization: Bearer <token>` nos endpoints protegidos.
 
 **Campos obrigatórios (enum):** `perfil` (POST/PUT `/api/usuarios`), `prioridade` (POST `/api/ocorrencias`) e `tipoManutencao` (POST `/api/ordens-servico`) são obrigatórios — omissão ou `null` devolve `400` com detalhe por campo. Nunca omita esses campos (historicamente, a omissão de `perfil` criava silenciosamente um Administrador).
 
@@ -43,7 +43,7 @@ As respostas usam JSON e propriedades em `camelCase`. Os enums são representado
 | GET | `/api/planos-manutencao` | Admin | Lista; `somenteVencidos=true` |
 | GET | `/api/planos-manutencao/{id}` | Admin | Consulta |
 | POST | `/api/planos-manutencao` | Admin | Cadastro |
-| PUT | `/api/planos-manutencao/{id}` | Admin | Atualização |
+| PUT | `/api/planos-manutencao/{id}` | Admin | Atualização; trocar equipamento com OS vinculada retorna 409 |
 | PATCH | `/api/planos-manutencao/{id}/inativar` | Admin | Inativa |
 | GET | `/api/dashboard` | Admin | Contadores para React |
 | GET | `/api/health` | Público | Verificação simples |
@@ -99,4 +99,8 @@ Plano preventivo (Admin): `POST /api/planos-manutencao`
 - `409`: operação em conflito com outra ocorrência/OS, estado, nome ou patrimônio duplicado.
 - `500`: erro inesperado. Detalhes ficam nos logs, não são exibidos para o usuário.
 
-**Formato dos erros:** negócio, `401` e `403` usam o envelope `{"erro":"mensagem"}` (inclusive corpos de 401/403 do middleware JWT). Erros de validação de modelo (`400`) usam `ValidationProblemDetails` com o dicionário `errors` por campo — trate ambos no cliente.
+**Formato dos erros:** negócio, `401` e `403` usam o envelope `{"erro":"mensagem"}` (inclusive corpos de 401/403 do middleware JWT). Desafios de autenticação em endpoints protegidos retornam também `WWW-Authenticate: Bearer`. Erros de validação de modelo (`400`) usam `ValidationProblemDetails` com o dicionário `errors` por campo — trate ambos no cliente.
+
+**Plano preventivo:** PUT não pode trocar `equipamentoId` quando qualquer OS já referencia o plano (409); editar outros dados no mesmo equipamento continua permitido. Isso preserva o equipamento da OS e seu histórico sem mudar o esquema.
+
+**OpenAPI:** respostas de negócio `401`/`403`/`409` descrevem `ErroResposta` (`{erro}`); `400` admite `ErroResposta` ou `ValidationProblemDetails`, sem mudar o comportamento da API. As decisões de datas e registro/conclusão estão em `PENDENCIAS_E_DECISOES.md`.

@@ -2,7 +2,7 @@
 
 API do sistema de manutenção industrial conforme a divisão do `ResumoPIM.docx`: ASP.NET Core Web API, C#, Entity Framework Core, SQL Server, JWT e Swagger. A API é o único acesso ao banco — React (web) e Flutter (mobile) consomem exclusivamente estes endpoints; todas as regras de negócio e transições de estado são centralizadas no backend.
 
-**Estado atual:** compilado com 0 erros/0 avisos; **78 testes automatizados verdes (44 unitários + 34 de integração HTTP)**, executados 2× com determinismo; smoke HTTP real validado (health, 401 com corpo JSON, CORS preflight/origem permitida/origem bloqueada); **fluxo completo validado contra SQL Server 2022 real** em contêiner Docker isolado — 43/43 verificações PASS, incluindo índices únicos filtrados, 1:1 ocorrência→OS e concorrência em Assumir (ver "Validação com SQL Server real").
+**Estado atual:** build com **0 erros/0 avisos** e **90/90 testes aprovados (44 unitários + 46 HTTP)**. Revisão direcionada: vínculo de equipamento do plano protegido quando existe OS, desafio Bearer restaurado no 401 e esquemas de erro do OpenAPI corrigidos, preservando os envelopes HTTP. Regressão nova contra SQL Server 2022 isolado: **13/13 verificações aprovadas**. O gate SQL anterior e seus limites estão descritos abaixo; decisões de negócio e alinhamento do esquema ainda dependem de aprovação.
 
 ## O que instalar
 
@@ -32,7 +32,7 @@ O script solicita a senha inicial (usada **somente** se a tabela `Usuarios` esti
 ```powershell
 dotnet restore
 dotnet build
-dotnet test    # 78 testes: unitarios (SQLite) + integracao HTTP (WebApplicationFactory)
+dotnet test    # 90 testes: unitarios (SQLite) + integracao HTTP (WebApplicationFactory)
 ```
 
 ## Contratos que o frontend precisa respeitar
@@ -82,13 +82,17 @@ Mudanças estruturais seguem o protocolo do grupo: alinhar com Léo antes de apl
 
 ## Validação com SQL Server real
 
-**Validado em 20/10/2026** contra SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`) em contêiner Docker isolado (bind somente em `127.0.0.1:14330`), com as migrations reais aplicadas via `dotnet ef database update` e a API rodando com persistência no SQL Server. Resultado: **43/43 verificações PASS por HTTP**:
+**Gate histórico (20/10/2026):** SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`) em contêiner isolado, bind somente em loopback, migrations reais e API persistindo no SQL Server. Registro preciso: primeira sonda **42/43 PASS**; um payload inválido foi corrigido e o re-probe passou **8/8**. Não houve execução única final 43/43. Fluxos resolvido/não resolvido e atribuição concorrente foram observados; isso não é teste de estresse.
 
-- Schema idêntico ao aprovado: 7 tabelas; índices únicos com filtros confirmados no banco (`IX_Setores_Nome [Ativo]=(1)`, `IX_Ocorrencias_EquipamentoId [Status]<>(2)`, `IX_OrdensServicos_OcorrenciaId [OcorrenciaId] IS NOT NULL`, patrimônio, email, `Manutencao.OrdemServicoId`); 8 FKs `NO_ACTION` (Restrict).
-- Login PBKDF2/JWT real; 401 sem token/com senha errada; 403 por perfil e de técnico não-responsável; 409 de patrimônio/setor duplicados, 2ª ocorrência ativa e 2ª OS para a mesma ocorrência — todos vindos das restrições reais do SQL Server.
+- Schema local da API (aprovação de Léo ainda pendente): 7 tabelas; índices únicos com filtros confirmados no banco (`IX_Setores_Nome [Ativo]=(1)`, `IX_Ocorrencias_EquipamentoId [Status]<>(2)`, `IX_OrdensServicos_OcorrenciaId [OcorrenciaId] IS NOT NULL`, patrimônio, email, `Manutencao.OrdemServicoId`); 8 FKs `NO_ACTION` (Restrict).
+- Login PBKDF2/JWT real; 401 sem token/com senha errada; 403 por perfil e de técnico não-responsável; 409 de patrimônio/setor duplicados, 2ª ocorrência ativa e 2ª OS para a mesma ocorrência — observados por HTTP; as pré-validações da API podem rejeitar antes das restrições do banco.
 - Regra 1:1 confirmada por contagem direta na tabela (1 OS por ocorrência); senhas persistidas somente como hash PBKDF2 (4/4 na verificação direta, zero texto puro).
 - Fluxo completo resolvido: OS Concluída + Ocorrência Resolvida + Equipamento Funcionando; não resolvido: OS Concluída + Ocorrência Aberta + Equipamento Parado (Manutencao persistida com datas e `ProblemaResolvido`).
 - **Concorrência real**: dois técnicos assumindo a mesma OS simultaneamente → exatamente 1×200 e 1×409 (UPDATE atômico com predicado).
+
+**Regressão direcionada desta revisão:** 13/13 PASS em SQL Server 2022 descartável, com banco novo e migrations reais: bloqueio da troca de equipamento com OS Aberta/EmAtendimento/Concluída, vínculo persistido, edição sem troca permitida, conclusão no equipamento original, desafio Bearer e declaração 409 no OpenAPI. Contêiner/volume e API temporária removidos. Não foram repetidos os testes do gate completo. Os testes de regressão permanentes estão em `HttpPlanoVinculoTests`, `HttpBearerChallengeTests`, `HttpRevogacaoTests` e `HttpOpenApiErrosTests`.
+
+**Limites da evidência histórica:** a sonda de filtro combinado verificava somente status HTTP; a identificação do técnico vencedor usava ordem de retorno das threads, não sua identidade. A observação de uma resposta 200 e outra 409 permanece válida. Confira detalhes em `docs/PENDENCIAS_E_DECISOES.md`.
 
 Reprodução local (Docker):
 
@@ -98,20 +102,20 @@ dotnet ef database update --project .\SistemaManutencao.API --connection "Server
 # inicie a API apontando ConnectionStrings__DefaultConnection para o mesmo banco e execute a coleção Postman ate o fim
 ```
 
-Pendente apenas para o ambiente do grupo: aplicar `database update` no SQL Server compartilhado (alinhado com Léo) e rodar a coleção Postman ponta a ponta.
+Pendente para o ambiente do grupo (sem autorização implícita neste README): aplicar `database update` no SQL Server compartilhado (alinhado com Léo) e rodar a coleção Postman ponta a ponta.
 
 ## Documentação disponível
 
 - `docs/CONTRATOS_API.md`: endpoints, permissões e exemplos JSON (contrato oficial em texto).
 - `docs/openapi.json`: documento OpenAPI exportado do código em execução (28 rotas / 38 operações) — regenerar após mudanças.
-- `docs/SistemaManutencaoPIM.postman_collection.json`: demonstração em sequência (20 requisições).
+- `docs/SistemaManutencaoPIM.postman_collection.json`: demonstração em sequência (21 requisições).
 - `docs/ROTEIRO_APRESENTACAO.md`: fala curta para o professor e sequência da demonstração.
 - `docs/PENDENCIAS_E_DECISOES.md`: alinhamentos pendentes com Léo, Gustavo e Marcos.
-- `tests/SistemaManutencao.Tests/`: 78 testes (unitários + integração HTTP).
+- `tests/SistemaManutencao.Tests/`: 90 testes (unitários + integração HTTP).
 
 ## Publicar no GitHub
 
-Esta pasta é um repositório Git pronto (commits locais; **push não realizado**). Nenhum segredo é versionado: `Jwt:Key` e `SeedAdmin` vêm de user-secrets/variáveis de ambiente; a connection string usa `Trusted_Connection`. Antes do push: revisar `docs/`, definir LICENSE (decisão sua) e adicionar o remote.
+Publicável como backend com **ressalvas explícitas**, não como entrega funcional sem pendências. D1/D2 (continuidade), D5 (datas informadas pelo técnico), D11/D12 e o alinhamento do modelo com Léo permanecem em `docs/PENDENCIAS_E_DECISOES.md`. Não houve push. `Jwt:Key` e `SeedAdmin` vêm de user-secrets/variáveis de ambiente; senhas em exemplos/fixtures são demonstrativas, não credenciais de produção. Antes de publicar: definir remote/visibilidade e LICENSE, se desejada.
 
 ## Estrutura
 
@@ -128,7 +132,7 @@ SistemaManutencaoPIM/
 │   ├── Helpers/           # Erros de negócio e identidade do usuário logado
 │   ├── Migrations/        # Estrutura versionada do banco (tooling padrão)
 │   └── Program.cs         # JWT, CORS, DI, tratamento de erros, Swagger
-├── tests/SistemaManutencao.Tests/   # 78 testes
+├── tests/SistemaManutencao.Tests/   # 90 testes
 ├── docs/                  # Contratos, OpenAPI, Postman, pendências
 └── scripts/iniciar-dev.ps1
 ```

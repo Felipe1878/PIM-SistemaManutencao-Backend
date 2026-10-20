@@ -51,12 +51,19 @@ public class PlanosManutencaoController(AppDbContext db) : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Atualizar(int id, [FromBody] PlanoManutencaoDto dto)
     {
+        await using var transacao = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
         var p = await db.PlanosManutencao.FindAsync(id);
         if (p is null) return NotFound();
+        if (p.EquipamentoId != dto.EquipamentoId &&
+            await db.OrdensServicos.AnyAsync(x => x.PlanoManutencaoId == id))
+            throw new RegraNegocioException(409, "Plano com OS vinculada não pode trocar de equipamento.");
         await ValidarAsync(dto); Copiar(dto, p);
-        await db.SaveChangesAsync(); return Ok(p);
+        await db.SaveChangesAsync();
+        await transacao.CommitAsync();
+        return Ok(p);
     }
     [Authorize(Roles = "Administrador"), HttpPatch("{id:int}/inativar")]
     [ProducesResponseType(StatusCodes.Status200OK)]

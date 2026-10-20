@@ -14,9 +14,9 @@ namespace SistemaManutencao.API.Services;
 
 public class AuthService(AppDbContext db, IPasswordHasher<Usuario> hasher, IConfiguration config)
 {
-    // Usuário e hash fictícios usados no login de email inexistente: executam o mesmo PBKDF2
-    // de verificação do caminho real, mantendo o tempo de resposta constante (impede
-    // enumerar emails cadastrados medindo o tempo de resposta — correção de segurança).
+    // Usuário e hash fictícios usados no login de email inexistente para também executar PBKDF2.
+    // Mitiga o caminho rápido de credencial inexistente; não garante tempo de resposta constante
+    // nem constitui uma medição de resistência à enumeração por timing.
     private static readonly Usuario UsuarioVerificacao = new() { Nome = "Verificacao", Email = "verificacao@invalido" };
     private static string? _hashVerificacao;
 

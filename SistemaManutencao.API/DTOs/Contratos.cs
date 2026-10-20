@@ -4,6 +4,8 @@ using SistemaManutencao.API.Models;
 
 namespace SistemaManutencao.API.DTOs;
 
+public record ErroResposta([property: Required] string Erro);
+
 public class LoginDto
 {
     [Required, EmailAddress] public string Email { get; set; } = "";
