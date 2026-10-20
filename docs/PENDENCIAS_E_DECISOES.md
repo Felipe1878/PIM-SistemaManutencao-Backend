@@ -6,9 +6,9 @@ Revisão direcionada do código e do `ResumoPIM.docx` em 20/10/2026. Os testes d
 
 - **D1 — continuidade da corretiva:** `ConcluirAsync(false)` conclui a OS, reabre a ocorrência e deixa o equipamento Parado. `CancelarAsync` também mantém a ocorrência ativa. `CriarAsync` rejeita outra OS para essa ocorrência (1:1); `RegistrarAsync` rejeita outra ocorrência ativa. Não há endpoint de reabertura. Definir continuidade sem remover a cardinalidade oficial.
 - **D2 — preventiva não resolvida:** conclui a OS e deixa o equipamento Parado, sem ocorrência vinculada. Nova preventiva exige equipamento Funcionando; nova ocorrência também exige Funcionando. O equipamento fica sem continuidade pelo fluxo atual. Definir a regra, sem criar ocorrência fictícia ou mudar status silenciosamente.
-- **D5 — datas da manutenção:** o Word exige que o técnico informe início/conclusão. Atualmente os DTOs não recebem essas datas; `IniciarAsync`/`ConcluirAsync` carimbam `DateTime.UtcNow`. Aprovar se serão datas declaradas pelo técnico ou carimbos operacionais, incluindo validações e contrato dos clientes. A implementação atual não cumpre literalmente a entrada de datas pelo técnico.
+- **D5 — datas da manutenção (implementado):** `/iniciar` aceita `dataInicio` UTC opcional e `/concluir` aceita `dataConclusao` UTC opcional. O servidor mantém compatibilidade e usa `DateTime.UtcNow` quando omitidas. Rejeita valores sem UTC e conclusão anterior ao início. Nenhuma coluna/migration foi alterada.
 - **D11 — ocorrência pelo administrador:** hoje POST e GET de ocorrências aceitam Administrador/Operador. O Word atribui registro ao Operador e acompanhamento ao Administrador, sem explicitar essa permissão adicional. Ratificar ou restringir; não foi alterada nesta revisão.
-- **D12 — registro versus conclusão:** PUT `/manutencao` é opcional; POST `/concluir` exige diagnóstico/serviço novamente e sobrescreve os textos e observações (observação omitida vira null). Ratificar esse contrato ou separar conclusão do registro. Não se tornou obrigatório executar PUT antes de concluir.
+- **D12 — registro versus conclusão (implementado):** PUT `/manutencao` permanece opcional; a conclusão reutiliza diagnóstico/serviço já registrados ou aceita ambos no próprio POST. Observações omitidas são preservadas; técnico responsável continua obrigatório. Nenhuma migration foi alterada.
 
 ## Compatibilidade com Léo
 
@@ -21,9 +21,9 @@ Comparação feita com a seção de banco do Word; nenhum DDL/modelo executável
 
 ## Evidência e publicação
 
-- Build final e suíte: consulte README. O gate SQL anterior é histórico; nesta revisão foram executadas somente regressões SQL direcionadas ao vínculo preventivo e ao desafio HTTP, em banco descartável isolado.
+- Build desta entrega: 0 erros/0 avisos; suíte: 94/94 testes (44 unitários + 50 HTTP), executados localmente sobre SQLite in-memory/WebApplicationFactory. OpenAPI exportado do servidor local com banco não acessado. As verificações SQL Server abaixo são históricas e não foram repetidas nesta entrega.
 - O gate histórico teve 42/43 verificações no primeiro script; a falha era payload inválido da sonda e o re-probe corrigido passou 8/8. Não houve uma execução única final 43/43. A sonda de filtro combinado verificava apenas os status HTTP, não o conteúdo; a escolha do técnico vencedor dependia indevidamente da ordem de conclusão das threads. A observação de uma resposta 200 e outra 409 permanece válida, mas não equivale a teste de estresse.
 - Login de email inexistente executa PBKDF2 fictício para mitigar o caminho rápido; não há comprovação de tempo constante nem de eliminação completa de canal de timing.
 - Publicável como backend com limitações declaradas. Não apresentar como solução de negócio integralmente aprovada antes das decisões acima e do alinhamento do esquema.
 
-Escopo exclusivo de André: sem telas React/Flutter, sem mudanças no banco compartilhado, sem push. Autenticação inicial continua por SeedAdmin somente com tabela de usuários vazia; chave JWT via configuração segura, nunca literal de produção no repositório.
+Escopo exclusivo de André: sem telas React/Flutter e sem mudanças no banco compartilhado. Autenticação inicial continua por SeedAdmin somente com tabela de usuários vazia; chave JWT via configuração segura, nunca literal de produção no repositório.

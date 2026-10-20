@@ -36,9 +36,9 @@ As respostas usam JSON e propriedades em `camelCase`. Os enums são representado
 | GET | `/api/ordens-servico/minhas` | Técnico | OS assumidas |
 | POST | `/api/ordens-servico` | Admin | Cria corretiva ou preventiva manual |
 | POST | `/api/ordens-servico/{id}/assumir` | Técnico | Reserva a OS |
-| POST | `/api/ordens-servico/{id}/iniciar` | Técnico | Começa serviço e põe equipamento em manutenção |
+| POST | `/api/ordens-servico/{id}/iniciar` | Técnico responsável | Começa serviço e põe equipamento em manutenção; aceita `dataInicio` UTC opcional |
 | PUT | `/api/ordens-servico/{id}/manutencao` | Técnico | Registra diagnóstico e serviço durante atendimento |
-| POST | `/api/ordens-servico/{id}/concluir` | Técnico | Registra diagnóstico e fecha OS |
+| POST | `/api/ordens-servico/{id}/concluir` | Técnico responsável | Conclui; reutiliza diagnóstico/serviço registrados ou aceita os dois no corpo |
 | POST | `/api/ordens-servico/{id}/cancelar` | Admin | Cancela OS aberta |
 | GET | `/api/planos-manutencao` | Admin | Lista; `somenteVencidos=true` |
 | GET | `/api/planos-manutencao/{id}` | Admin | Consulta |
@@ -84,8 +84,9 @@ OS preventiva manual (Admin): `POST /api/ordens-servico`
 ```
 Concluir (Técnico): `POST /api/ordens-servico/1/concluir`
 ```json
-{"diagnostico":"Cabo de alimentacao rompido.","servicoRealizado":"Cabo substituido e funcionamento verificado.","observacoes":"Teste realizado com sucesso.","problemaResolvido":true}
+{"dataConclusao":"2026-10-20T12:30:00Z","problemaResolvido":true}
 ```
+`diagnostico` e `servicoRealizado` são opcionais na conclusão quando já foram registrados por `PUT /manutencao`; se ainda não existirem, informe ambos na conclusão. Omitir `observacoes` preserva o valor registrado. As datas `dataInicio` (corpo opcional de `/iniciar`) e `dataConclusao` são opcionais, aceitam somente UTC (`Z`) e a conclusão não pode anteceder o início. Quando omitidas, o servidor registra o horário atual em UTC. As respostas e `GET /ordens-servico/{id}` devolvem os timestamps com `Z`.
 Plano preventivo (Admin): `POST /api/planos-manutencao`
 ```json
 {"equipamentoId":1,"descricao":"Inspecao mensal de lubrificacao","periodicidadeDias":30,"proximaExecucao":"2026-11-15T09:00:00Z"}
@@ -103,4 +104,4 @@ Plano preventivo (Admin): `POST /api/planos-manutencao`
 
 **Plano preventivo:** PUT não pode trocar `equipamentoId` quando qualquer OS já referencia o plano (409); editar outros dados no mesmo equipamento continua permitido. Isso preserva o equipamento da OS e seu histórico sem mudar o esquema.
 
-**OpenAPI:** respostas de negócio `401`/`403`/`409` descrevem `ErroResposta` (`{erro}`); `400` admite `ErroResposta` ou `ValidationProblemDetails`, sem mudar o comportamento da API. As decisões de datas e registro/conclusão estão em `PENDENCIAS_E_DECISOES.md`.
+**OpenAPI:** Bearer é declarado operação a operação nos endpoints protegidos. Login e health são públicos. Respostas de negócio `401`/`403`/`409` descrevem `ErroResposta` (`{erro}`); `400` admite `ErroResposta` ou `ValidationProblemDetails`.

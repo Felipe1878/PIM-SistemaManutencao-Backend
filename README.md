@@ -2,7 +2,7 @@
 
 API do sistema de manutenção industrial conforme a divisão do `ResumoPIM.docx`: ASP.NET Core Web API, C#, Entity Framework Core, SQL Server, JWT e Swagger. A API é o único acesso ao banco — React (web) e Flutter (mobile) consomem exclusivamente estes endpoints; todas as regras de negócio e transições de estado são centralizadas no backend.
 
-**Estado atual:** build com **0 erros/0 avisos** e **90/90 testes aprovados (44 unitários + 46 HTTP)**. Revisão direcionada: vínculo de equipamento do plano protegido quando existe OS, desafio Bearer restaurado no 401 e esquemas de erro do OpenAPI corrigidos, preservando os envelopes HTTP. Regressão nova contra SQL Server 2022 isolado: **13/13 verificações aprovadas**. O gate SQL anterior e seus limites estão descritos abaixo; decisões de negócio e alinhamento do esquema ainda dependem de aprovação.
+**Estado desta entrega:** `dotnet build` passou sem erros ou avisos; `dotnet test` passou com **94/94 testes** (44 unitários + 50 HTTP). As verificações SQL Server citadas abaixo são históricas; não foram repetidas nesta entrega. D1/D2, D11 e alinhamento do esquema com Léo continuam pendentes.
 
 ## O que instalar
 
@@ -32,7 +32,7 @@ O script solicita a senha inicial (usada **somente** se a tabela `Usuarios` esti
 ```powershell
 dotnet restore
 dotnet build
-dotnet test    # 90 testes: unitarios (SQLite) + integracao HTTP (WebApplicationFactory)
+dotnet test    # 94 testes: unitários (SQLite) + integração HTTP (WebApplicationFactory)
 ```
 
 ## Contratos que o frontend precisa respeitar
@@ -44,6 +44,8 @@ dotnet test    # 90 testes: unitarios (SQLite) + integracao HTTP (WebApplication
 - **Erros:** negócio/401/403 → envelope `{"erro":"mensagem"}` (inclusive corpos de 401/403 do middleware JWT); validação 400 → `ValidationProblemDetails` com `errors` por campo — trate ambos no cliente.
 - **CORS:** em Development libera `http://localhost:3000`, `http://localhost:5173` e `http://localhost:8080` (`Cors:Origens`); em produção configure `Cors:Origens` com as origens reais — sem a chave, nenhuma origem é liberada.
 - **Datas em UTC** — converter para o fuso local na exibição.
+- **Datas da manutenção:** `POST /iniciar` aceita corpo opcional `{"dataInicio":"2026-10-20T10:00:00Z"}`; `POST /concluir` aceita `dataConclusao`. Ambas são opcionais, exigem UTC com `Z`, e usam o horário UTC do servidor quando omitidas. Conclusão anterior ao início retorna 400.
+- **Conclusão da OS:** se diagnóstico e serviço já foram registrados, basta enviar `problemaResolvido` (e opcionalmente `dataConclusao`/`observacoes`). Sem registro anterior, envie também `diagnostico` e `servicoRealizado`. Observações omitidas permanecem como estavam.
 
 ## Teste básico no Swagger
 
@@ -54,7 +56,7 @@ dotnet test    # 90 testes: unitarios (SQLite) + integracao HTTP (WebApplication
 5. POST `/api/usuarios` duas vezes: um Operador e um Técnico (exemplos em `docs/CONTRATOS_API.md`).
 6. Login como Operador. POST `/api/ocorrencias` (`prioridade` obrigatória). GET `/api/ocorrencias/minhas`.
 7. Login de Admin. POST `/api/ordens-servico` (`tipoManutencao` obrigatório) para a ocorrência criada.
-8. Login como Técnico. POST `/{id}/assumir`, POST `/{id}/iniciar`, PUT `/{id}/manutencao` (opcional), POST `/{id}/concluir` com `problemaResolvido: true`.
+8. Login como Técnico. POST `/{id}/assumir`, POST `/{id}/iniciar` com `dataInicio` opcional UTC, PUT `/{id}/manutencao` (opcional), POST `/{id}/concluir` com `problemaResolvido` e `dataConclusao` opcional; os textos podem ser informados antes ou na conclusão.
 9. Login de Admin. GET `/api/equipamentos/{id}` → `"Funcionando"`; GET `/api/ocorrencias/{id}` → `"Resolvida"`.
 10. Repita com outro equipamento e `problemaResolvido: false` (OS Concluída, ocorrência segue Aberta, equipamento Parado).
 
@@ -107,15 +109,16 @@ Pendente para o ambiente do grupo (sem autorização implícita neste README): a
 ## Documentação disponível
 
 - `docs/CONTRATOS_API.md`: endpoints, permissões e exemplos JSON (contrato oficial em texto).
-- `docs/openapi.json`: documento OpenAPI exportado do código em execução (28 rotas / 38 operações) — regenerar após mudanças.
+- `docs/openapi.json`: documento OpenAPI exportado do código em execução; Bearer consta nas operações protegidas e login/health são públicos.
 - `docs/SistemaManutencaoPIM.postman_collection.json`: demonstração em sequência (21 requisições).
 - `docs/ROTEIRO_APRESENTACAO.md`: fala curta para o professor e sequência da demonstração.
 - `docs/PENDENCIAS_E_DECISOES.md`: alinhamentos pendentes com Léo, Gustavo e Marcos.
-- `tests/SistemaManutencao.Tests/`: 90 testes (unitários + integração HTTP).
+- `docs/ENTREGA_EQUIPE.md`: resumo de integração e roteiro para Léo, Gustavo e Marcos.
+- `tests/SistemaManutencao.Tests/`: testes unitários e integração HTTP; execute `dotnet test` para a contagem atual.
 
 ## Publicar no GitHub
 
-Publicável como backend com **ressalvas explícitas**, não como entrega funcional sem pendências. D1/D2 (continuidade), D5 (datas informadas pelo técnico), D11/D12 e o alinhamento do modelo com Léo permanecem em `docs/PENDENCIAS_E_DECISOES.md`. Não houve push. `Jwt:Key` e `SeedAdmin` vêm de user-secrets/variáveis de ambiente; senhas em exemplos/fixtures são demonstrativas, não credenciais de produção. Antes de publicar: definir remote/visibilidade e LICENSE, se desejada.
+Entrega do backend preparada com ressalvas de integração. D1/D2, D11 e alinhamento do modelo com Léo permanecem pendentes; D5/D12 foram implementados de forma compatível com os clientes atuais. Consulte `docs/PENDENCIAS_E_DECISOES.md` e `docs/ENTREGA_EQUIPE.md`.
 
 ## Estrutura
 
@@ -132,7 +135,7 @@ SistemaManutencaoPIM/
 │   ├── Helpers/           # Erros de negócio e identidade do usuário logado
 │   ├── Migrations/        # Estrutura versionada do banco (tooling padrão)
 │   └── Program.cs         # JWT, CORS, DI, tratamento de erros, Swagger
-├── tests/SistemaManutencao.Tests/   # 90 testes
+├── tests/SistemaManutencao.Tests/   # testes unitários e integração HTTP
 ├── docs/                  # Contratos, OpenAPI, Postman, pendências
 └── scripts/iniciar-dev.ps1
 ```

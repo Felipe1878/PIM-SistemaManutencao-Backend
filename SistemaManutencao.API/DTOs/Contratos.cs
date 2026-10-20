@@ -63,10 +63,15 @@ public class RegistrarManutencaoDto
 }
 public class ConcluirOrdemServicoDto
 {
-    [Required, StringLength(3000, MinimumLength = 5)] public string Diagnostico { get; set; } = "";
-    [Required, StringLength(3000, MinimumLength = 5)] public string ServicoRealizado { get; set; } = "";
+    [StringLength(3000, MinimumLength = 5)] public string? Diagnostico { get; set; }
+    [StringLength(3000, MinimumLength = 5)] public string? ServicoRealizado { get; set; }
     [StringLength(3000)] public string? Observacoes { get; set; }
+    public DateTime? DataConclusao { get; set; }
     [Required] public bool? ProblemaResolvido { get; set; }
+}
+public class IniciarOrdemServicoDto
+{
+    public DateTime? DataInicio { get; set; }
 }
 public class PlanoManutencaoDto
 {

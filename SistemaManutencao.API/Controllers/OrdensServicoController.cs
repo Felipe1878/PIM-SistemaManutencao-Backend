@@ -62,7 +62,8 @@ public class OrdensServicoController(AppDbContext db, OrdemServicoService servic
                 x.TipoManutencao, x.Status, x.DataAbertura,
                 Manutencao = x.Manutencao == null ? null : new { x.Manutencao.Id, x.Manutencao.Diagnostico,
                     x.Manutencao.ServicoRealizado, x.Manutencao.Observacoes,
-                    x.Manutencao.DataInicio, x.Manutencao.DataConclusao, x.Manutencao.ProblemaResolvido } })
+                    DataInicio = ComoUtc(x.Manutencao.DataInicio),
+                    DataConclusao = ComoUtc(x.Manutencao.DataConclusao), x.Manutencao.ProblemaResolvido } })
             .SingleOrDefaultAsync();
         return os is null ? NotFound() : Ok(os);
     }
@@ -99,10 +100,10 @@ public class OrdensServicoController(AppDbContext db, OrdemServicoService servic
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Iniciar(int id)
+    public async Task<IActionResult> Iniciar(int id, [FromBody] IniciarOrdemServicoDto? dto)
     {
-        var os = await service.IniciarAsync(id, UsuarioLogado.Id(User));
-        return Ok(new { os.Id, os.TecnicoId, os.Status, dataInicio = os.Manutencao?.DataInicio });
+        var os = await service.IniciarAsync(id, UsuarioLogado.Id(User), dto?.DataInicio);
+        return Ok(new { os.Id, os.TecnicoId, os.Status, dataInicio = ComoUtc(os.Manutencao?.DataInicio) });
     }
 
     [Authorize(Roles = "Tecnico"), HttpPut("{id:int}/manutencao")]
@@ -116,7 +117,7 @@ public class OrdensServicoController(AppDbContext db, OrdemServicoService servic
     {
         var m = await service.RegistrarManutencaoAsync(id, UsuarioLogado.Id(User), dto);
         return Ok(new { m.Id, m.OrdemServicoId, m.Diagnostico, m.ServicoRealizado,
-            m.Observacoes, m.DataInicio });
+            m.Observacoes, dataInicio = ComoUtc(m.DataInicio) });
     }
 
     [Authorize(Roles = "Tecnico"), HttpPost("{id:int}/concluir")]
@@ -130,8 +131,11 @@ public class OrdensServicoController(AppDbContext db, OrdemServicoService servic
     {
         var os = await service.ConcluirAsync(id, UsuarioLogado.Id(User), dto);
         return Ok(new { os.Id, os.Status, problemaResolvido = os.Manutencao?.ProblemaResolvido,
-            dataInicio = os.Manutencao?.DataInicio, dataConclusao = os.Manutencao?.DataConclusao });
+            dataInicio = ComoUtc(os.Manutencao?.DataInicio), dataConclusao = ComoUtc(os.Manutencao?.DataConclusao) });
     }
+
+    private static DateTime? ComoUtc(DateTime? data)
+        => data is null ? null : DateTime.SpecifyKind(data.Value, DateTimeKind.Utc);
 
     [Authorize(Roles = "Administrador"), HttpPost("{id:int}/cancelar")]
     [ProducesResponseType(StatusCodes.Status200OK)]

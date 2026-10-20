@@ -35,4 +35,22 @@ public sealed class HttpOpenApiErrosTests(ApiHttpFixture api)
         Assert.Contains("#/components/schemas/ErroResposta", referencias);
         Assert.Contains("#/components/schemas/ValidationProblemDetails", referencias);
     }
+
+    [Fact]
+    public async Task OpenAPI_marca_login_e_health_publicos_e_mantem_Bearer_global_para_rotas_protegidas()
+    {
+        using var cliente = api.ClienteAnonimo();
+        var documento = await (await cliente.GetAsync("/swagger/v1/swagger.json")).CorpoAsync();
+        var paths = documento.GetProperty("paths");
+
+        foreach (var (path, method) in new[] { ("/api/auth/login", "post"), ("/api/health", "get") })
+        {
+            var operacao = paths.GetProperty(path).GetProperty(method);
+            Assert.False(operacao.TryGetProperty("security", out _), $"Endpoint público {path} não deve herdar Bearer.");
+        }
+
+        var protegida = paths.GetProperty("/api/equipamentos").GetProperty("get");
+        Assert.Contains(protegida.GetProperty("security").EnumerateArray(), requisito =>
+            requisito.TryGetProperty("Bearer", out _));
+    }
 }

@@ -65,7 +65,7 @@ public class OrdemServicoService(AppDbContext db)
         return (await db.OrdensServicos.AsNoTracking().SingleAsync(x => x.Id == id));
     }
 
-    public async Task<OrdemServico> IniciarAsync(int id, int tecnicoId)
+    public async Task<OrdemServico> IniciarAsync(int id, int tecnicoId, DateTime? dataInicio = null)
     {
         await using var transacao = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
         var os = await db.OrdensServicos.Include(x => x.Ocorrencia).ThenInclude(x => x!.Equipamento)
@@ -75,6 +75,7 @@ public class OrdemServicoService(AppDbContext db)
         if (os.TecnicoId != tecnicoId) throw new RegraNegocioException(403, "Somente o técnico responsável pode iniciar esta OS.");
         if (os.Status != StatusOrdemServico.Aberta || os.Manutencao is not null)
             throw new RegraNegocioException(409, "OS não está aberta ou já foi iniciada.");
+        ValidarUtc(dataInicio, "Data de início");
         var equipamento = ObterEquipamento(os);
         if (!equipamento.Ativo) throw new RegraNegocioException(409, "Equipamento inativo.");
         if (os.Ocorrencia is not null)
@@ -87,7 +88,7 @@ public class OrdemServicoService(AppDbContext db)
             throw new RegraNegocioException(409, "Preventiva só pode iniciar com equipamento Funcionando.");
         equipamento.Status = StatusEquipamento.EmManutencao;
         os.Status = StatusOrdemServico.EmAtendimento;
-        db.Manutencoes.Add(new Manutencao { OrdemServicoId = id, DataInicio = DateTime.UtcNow });
+        db.Manutencoes.Add(new Manutencao { OrdemServicoId = id, DataInicio = dataInicio ?? DateTime.UtcNow });
         await db.SaveChangesAsync();
         await transacao.CommitAsync();
         return os;
@@ -122,11 +123,28 @@ public class OrdemServicoService(AppDbContext db)
         if (os.Status != StatusOrdemServico.EmAtendimento || os.Manutencao is null)
             throw new RegraNegocioException(409, "A OS precisa estar Em Atendimento para ser concluída.");
         var manutencao = os.Manutencao;
-        manutencao.Diagnostico = dto.Diagnostico.Trim();
-        manutencao.ServicoRealizado = dto.ServicoRealizado.Trim();
-        manutencao.Observacoes = dto.Observacoes?.Trim();
+        var diagnostico = string.IsNullOrWhiteSpace(dto.Diagnostico) ? manutencao.Diagnostico : dto.Diagnostico.Trim();
+        var servicoRealizado = string.IsNullOrWhiteSpace(dto.ServicoRealizado) ? manutencao.ServicoRealizado : dto.ServicoRealizado.Trim();
+        if (diagnostico.Length < 5 || servicoRealizado.Length < 5)
+            throw new RegraNegocioException(400, "Informe diagnóstico e serviço realizado na manutenção ou na conclusão.");
+        var dataConclusao = dto.DataConclusao ?? DateTime.UtcNow;
+        ValidarUtc(dto.DataConclusao, "Data de conclusão");
+        if (dataConclusao < manutencao.DataInicio)
+            throw new RegraNegocioException(400, "Data de conclusão não pode ser anterior à data de início.");
+        DateTime? proximaExecucao = null;
+        if (os.PlanoManutencao is not null && dto.ProblemaResolvido.Value)
+        {
+            try { proximaExecucao = dataConclusao.AddDays(os.PlanoManutencao.PeriodicidadeDias); }
+            catch (ArgumentOutOfRangeException)
+            {
+                throw new RegraNegocioException(400, "Data de conclusão e periodicidade ultrapassam o limite da próxima execução.");
+            }
+        }
+        manutencao.Diagnostico = diagnostico;
+        manutencao.ServicoRealizado = servicoRealizado;
+        if (dto.Observacoes is not null) manutencao.Observacoes = dto.Observacoes.Trim();
         manutencao.ProblemaResolvido = dto.ProblemaResolvido.Value;
-        manutencao.DataConclusao = DateTime.UtcNow;
+        manutencao.DataConclusao = dataConclusao;
         os.Status = StatusOrdemServico.Concluida;
         var equipamento = ObterEquipamento(os);
         equipamento.Status = dto.ProblemaResolvido.Value ? StatusEquipamento.Funcionando : StatusEquipamento.Parado;
@@ -135,8 +153,7 @@ public class OrdemServicoService(AppDbContext db)
         if (os.PlanoManutencao is not null && dto.ProblemaResolvido.Value)
         {
             os.PlanoManutencao.UltimaExecucao = manutencao.DataConclusao;
-            os.PlanoManutencao.ProximaExecucao = manutencao.DataConclusao!.Value
-                .AddDays(os.PlanoManutencao.PeriodicidadeDias);
+            os.PlanoManutencao.ProximaExecucao = proximaExecucao!.Value;
         }
         await db.SaveChangesAsync();
         await transacao.CommitAsync();
@@ -159,4 +176,10 @@ public class OrdemServicoService(AppDbContext db)
     private static Equipamento ObterEquipamento(OrdemServico os)
         => os.Ocorrencia?.Equipamento ?? os.PlanoManutencao?.Equipamento
             ?? throw new RegraNegocioException(409, "OS sem equipamento vinculado.");
+
+    private static void ValidarUtc(DateTime? data, string campo)
+    {
+        if (data is not null && data.Value.Kind != DateTimeKind.Utc)
+            throw new RegraNegocioException(400, $"{campo} deve estar em UTC (sufixo Z).");
+    }
 }

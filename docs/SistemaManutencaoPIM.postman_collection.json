@@ -345,8 +345,17 @@
       "name": "12 - Iniciar OS",
       "request": {
         "method": "POST",
-        "header": [],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "url": "{{baseUrl}}/api/ordens-servico/{{osId}}/iniciar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"dataInicio\": \"2026-10-20T10:00:00Z\"\n}"
+        },
         "auth": {
           "type": "bearer",
           "bearer": [
@@ -399,7 +408,7 @@
         "url": "{{baseUrl}}/api/ordens-servico/{{osId}}/concluir",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"diagnostico\": \"Fiação danificada no motor\",\n  \"servicoRealizado\": \"Substituicao da fiacao\",\n  \"observacoes\": \"Teste do motor realizado\",\n  \"problemaResolvido\": true\n}"
+          "raw": "{\n  \"dataConclusao\": \"2026-10-20T11:00:00Z\",\n  \"problemaResolvido\": true\n}"
         },
         "auth": {
           "type": "bearer",

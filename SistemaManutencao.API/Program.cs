@@ -78,16 +78,13 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.OperationFilter<ErrosHttpOperationFilter>();
+    c.OperationFilter<SegurancaPublicaOpenApiOperationFilter>();
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Sistema de Manutenção - PIM", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT obtido em POST /api/auth/login. Digite apenas o token.",
         Name = "Authorization", In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http, Scheme = "bearer", BearerFormat = "JWT"
-    });
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        { new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } }, Array.Empty<string>() }
     });
 });
 
@@ -134,7 +131,8 @@ app.UseCors("Frontends");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/api/health", () => Results.Ok(new { status = "online", servico = "SistemaManutencao.API" }));
+  app.MapGet("/api/health", () => Results.Ok(new { status = "online", servico = "SistemaManutencao.API" }))
+      .AllowAnonymous();
 app.Run();
 
 // Permite criar testes de integração via WebApplicationFactory se necessário.
