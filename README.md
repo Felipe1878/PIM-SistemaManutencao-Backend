@@ -2,7 +2,7 @@
 
 API do sistema de manutenção industrial conforme a divisão do `ResumoPIM.docx`: ASP.NET Core Web API, C#, Entity Framework Core, SQL Server, JWT e Swagger. A API é o único acesso ao banco — React (web) e Flutter (mobile) consomem exclusivamente estes endpoints; todas as regras de negócio e transições de estado são centralizadas no backend.
 
-**Estado atual:** compilado com 0 erros/0 avisos; **78 testes automatizados verdes (44 unitários + 34 de integração HTTP)**, executados 2× com determinismo; smoke HTTP real validado (health, 401 com corpo JSON, CORS preflight/origem permitida/origem bloqueada). **Pendente de ambiente:** fluxo completo contra SQL Server real — esta máquina não possui LocalDB/SQL Server (ver "Validação com SQL Server real").
+**Estado atual:** compilado com 0 erros/0 avisos; **78 testes automatizados verdes (44 unitários + 34 de integração HTTP)**, executados 2× com determinismo; smoke HTTP real validado (health, 401 com corpo JSON, CORS preflight/origem permitida/origem bloqueada); **fluxo completo validado contra SQL Server 2022 real** em contêiner Docker isolado — 43/43 verificações PASS, incluindo índices únicos filtrados, 1:1 ocorrência→OS e concorrência em Assumir (ver "Validação com SQL Server real").
 
 ## O que instalar
 
@@ -82,7 +82,23 @@ Mudanças estruturais seguem o protocolo do grupo: alinhar com Léo antes de apl
 
 ## Validação com SQL Server real
 
-Os testes automatizados rodam sem SQL Server (SQLite in-memory + WebApplicationFactory). Antes da apresentação, com SQL Server disponível: `dotnet ef database update` + executar a coleção Postman (`docs/SistemaManutencaoPIM.postman_collection.json`, 20 requisições) do início ao fim.
+**Validado em 20/10/2026** contra SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`) em contêiner Docker isolado (bind somente em `127.0.0.1:14330`), com as migrations reais aplicadas via `dotnet ef database update` e a API rodando com persistência no SQL Server. Resultado: **43/43 verificações PASS por HTTP**:
+
+- Schema idêntico ao aprovado: 7 tabelas; índices únicos com filtros confirmados no banco (`IX_Setores_Nome [Ativo]=(1)`, `IX_Ocorrencias_EquipamentoId [Status]<>(2)`, `IX_OrdensServicos_OcorrenciaId [OcorrenciaId] IS NOT NULL`, patrimônio, email, `Manutencao.OrdemServicoId`); 8 FKs `NO_ACTION` (Restrict).
+- Login PBKDF2/JWT real; 401 sem token/com senha errada; 403 por perfil e de técnico não-responsável; 409 de patrimônio/setor duplicados, 2ª ocorrência ativa e 2ª OS para a mesma ocorrência — todos vindos das restrições reais do SQL Server.
+- Regra 1:1 confirmada por contagem direta na tabela (1 OS por ocorrência); senhas persistidas somente como hash PBKDF2 (4/4 na verificação direta, zero texto puro).
+- Fluxo completo resolvido: OS Concluída + Ocorrência Resolvida + Equipamento Funcionando; não resolvido: OS Concluída + Ocorrência Aberta + Equipamento Parado (Manutencao persistida com datas e `ProblemaResolvido`).
+- **Concorrência real**: dois técnicos assumindo a mesma OS simultaneamente → exatamente 1×200 e 1×409 (UPDATE atômico com predicado).
+
+Reprodução local (Docker):
+
+```powershell
+docker run -d --name pim-mssql-gate -p 127.0.0.1:14330:1433 -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=<senha-forte>" -e MSSQL_PID=Developer mcr.microsoft.com/mssql/server:2022-latest
+dotnet ef database update --project .\SistemaManutencao.API --connection "Server=127.0.0.1,14330;Database=SistemaManutencaoPIM_GATE;User Id=sa;Password=<senha-forte>;TrustServerCertificate=True"
+# inicie a API apontando ConnectionStrings__DefaultConnection para o mesmo banco e execute a coleção Postman ate o fim
+```
+
+Pendente apenas para o ambiente do grupo: aplicar `database update` no SQL Server compartilhado (alinhado com Léo) e rodar a coleção Postman ponta a ponta.
 
 ## Documentação disponível
 
