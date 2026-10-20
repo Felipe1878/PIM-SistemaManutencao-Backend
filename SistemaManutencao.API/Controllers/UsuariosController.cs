@@ -68,6 +68,10 @@ public class UsuariosController(AppDbContext db, IPasswordHasher<Usuario> hasher
         var perfil = ValidarPerfil(dto.Perfil, dto.Funcao);
         var u = await db.Usuarios.FindAsync(id);
         if (u is null) return NotFound();
+        // M-11: o admin não pode rebaixar a própria conta — sem reativação via API e com seed
+        // apenas em banco vazio, um auto-rebaixamento deixaria o sistema sem administrador.
+        if (UsuarioLogado.Id(User) == id && perfil != PerfilUsuario.Administrador)
+            throw new RegraNegocioException(409, "Não é permitido alterar o perfil da própria conta administrativa.");
         if (u.Funcao == FuncaoFuncionario.Tecnico && (perfil != PerfilUsuario.Funcionario || dto.Funcao != FuncaoFuncionario.Tecnico) &&
             await db.OrdensServicos.AnyAsync(x => x.TecnicoId == id &&
                 (x.Status == StatusOrdemServico.Aberta || x.Status == StatusOrdemServico.EmAtendimento)))

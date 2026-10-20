@@ -98,6 +98,20 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task LoginComEmailInexistenteLanca401()
+    {
+        // Email inexistente: mesmo 401 e mesma mensagem de senha errada. O caminho executa
+        // a verificação de hash fictício (tempo de resposta constante anti-enumeração).
+        await using var banco = await BancoTeste.CriarAsync();
+
+        var erro = await Assert.ThrowsAsync<RegraNegocioException>(
+            () => LoginAsync(banco, "inexistente@pim.local"));
+
+        Assert.Equal(401, erro.StatusHttp);
+        Assert.Equal("Email ou senha inválidos.", erro.Message);
+    }
+
+    [Fact]
     public async Task LoginDeFuncionarioSemFuncaoLanca403()
     {
         await using var banco = await BancoTeste.CriarAsync();

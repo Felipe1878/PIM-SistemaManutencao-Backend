@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Json;
 using Xunit;
 
 namespace SistemaManutencao.Tests;
@@ -57,5 +58,30 @@ public sealed class HttpAutorizacaoTests
 
         Assert.Equal(HttpStatusCode.Forbidden, resposta.StatusCode);
         Assert.Equal("Você não possui permissão para realizar esta ação.", await resposta.ErroAsync());
+    }
+
+    [Fact]
+    public async Task Admin_nao_pode_rebaixar_a_propria_conta()
+    {
+        // M-11 (integridade administrativa): auto-rebaixamento deixaria o sistema sem admin
+        // (sem reativação via API; seed apenas em banco vazio). PUT em si mesmo mantendo
+        // Administrador continua permitido (ex.: atualizar o nome).
+        var admin = await _api.AdminAsync();
+        var lista = await admin.GetAsync("/api/usuarios");
+        Assert.True(lista.IsSuccessStatusCode);
+        var id = (await lista.CorpoAsync()).EnumerateArray()
+            .Single(u => u.GetProperty("email").GetString() == ApiHttpFixture.AdminEmail)
+            .GetProperty("id").GetInt32();
+
+        var rebaixamento = await admin.PutAsJsonAsync($"/api/usuarios/{id}",
+            new { nome = "Administrador Teste", perfil = "Funcionario", funcao = "Operador" });
+        Assert.Equal(HttpStatusCode.Conflict, rebaixamento.StatusCode);
+        Assert.Equal("Não é permitido alterar o perfil da própria conta administrativa.",
+            await rebaixamento.ErroAsync());
+
+        var mantendoPerfil = await admin.PutAsJsonAsync($"/api/usuarios/{id}",
+            new { nome = "Administrador Teste", perfil = "Administrador" });
+        Assert.True(mantendoPerfil.IsSuccessStatusCode,
+            $"PUT próprio mantendo Administrador falhou: {(int)mantendoPerfil.StatusCode}");
     }
 }
