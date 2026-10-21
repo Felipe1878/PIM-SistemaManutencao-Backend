@@ -1,143 +1,313 @@
-# PIM — Sistema de Manutenção | Entrega da API (André)
+# Sistema de Manutenção Industrial — API
 
-API do sistema de manutenção industrial conforme a divisão do `ResumoPIM.docx`: ASP.NET Core Web API, C#, Entity Framework Core, SQL Server, JWT e Swagger. A API é o único acesso ao banco — React (web) e Flutter (mobile) consomem exclusivamente estes endpoints; todas as regras de negócio e transições de estado são centralizadas no backend.
+**Backend REST API | ASP.NET Core 8**
 
-**Estado desta entrega:** `dotnet build` passou sem erros ou avisos; `dotnet test` passou com **94/94 testes** (44 unitários + 50 HTTP). As verificações SQL Server citadas abaixo são históricas; não foram repetidas nesta entrega. D1/D2, D11 e alinhamento do esquema com Léo continuam pendentes.
+API desenvolvida como parte de um Projeto Integrado Multidisciplinar (PIM), responsável pelo gerenciamento de equipamentos, ocorrências e ordens de serviço de manutenção industrial.
 
-## O que instalar
+O backend centraliza a autenticação, as regras de negócio e o acesso aos dados. As aplicações web (React) e mobile (Flutter), desenvolvidas pelos demais integrantes da equipe, utilizam seus endpoints HTTP.
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) — o SDK 10 também compila este projeto net8.0 (comprovado).
-- Ferramenta do EF para migrations: `dotnet tool install --global dotnet-ef --version 8.0.11`.
-- SQL Server LocalDB (vem com o Visual Studio), ou SQL Server Express / Developer — necessário para rodar com banco real.
-- VS Code com extensão C# ou Visual Studio (opcional).
-- Internet na primeira restauração dos pacotes NuGet.
+Este repositório contém exclusivamente a **API do projeto**, incluindo código-fonte, migrations, testes e documentação de integração.
 
-## Caminho mais rápido no Windows (PowerShell)
+## Principais funcionalidades
 
-1. Abra um terminal PowerShell **na pasta principal** (a que contém o `.sln`).
-2. Execute:
+- **Autenticação e autorização:** login JWT e controle de acesso por perfil.
+- **Gestão administrativa:** cadastro e consulta de usuários, setores e equipamentos.
+- **Ocorrências:** registro, acompanhamento e filtros por equipamento, descrição e status.
+- **Ordens de serviço:** criação, atribuição, início, atendimento, conclusão e cancelamento.
+- **Manutenção industrial:** registro de diagnóstico, serviço realizado, observações e datas.
+- **Manutenção preventiva:** gerenciamento de planos e criação manual de ordens de serviço.
+- **Dashboard:** consulta de indicadores administrativos.
+- **Integridade:** validações de negócio, controle de estados e proteção contra atribuição simultânea da mesma OS.
 
-```powershell
-dotnet --version
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\iniciar-dev.ps1
+A referência completa de endpoints está disponível em [Contratos da API](docs/CONTRATOS_API.md).
+
+## Arquitetura e tecnologias
+
+| Tecnologia | Utilização |
+|---|---|
+| C# / ASP.NET Core 8 | Desenvolvimento da API REST |
+| Entity Framework Core | Persistência, relacionamentos e migrations |
+| SQL Server | Banco de dados relacional |
+| JWT Bearer | Autenticação e autorização |
+| Swagger / OpenAPI | Documentação dos endpoints |
+| Postman | Demonstração dos fluxos HTTP |
+| xUnit / WebApplicationFactory / SQLite | Testes automatizados |
+
+A API mantém as regras de negócio nos serviços, enquanto os controllers recebem as requisições HTTP e os DTOs definem os contratos de entrada e saída.
+
+```text
+React (Web) ──────┐
+                  ├── HTTP/JSON ──> API ASP.NET Core ──> EF Core ──> SQL Server
+Flutter (Mobile) ─┘
 ```
 
-O script solicita a senha inicial (usada **somente** se a tabela `Usuarios` estiver vazia), define o email `admin@pim.local`, gera uma **chave JWT aleatória por sessão** e abre a API em `http://localhost:5088/swagger`.
+Os clientes não acessam o banco diretamente. Toda comunicação com os dados passa pela API.
 
-> A migration inicial é aplicada automaticamente **somente em Development** e requer SQL Server/LocalDB disponível. Sem LocalDB, configure `ConnectionStrings__DefaultConnection` apontando para um SQL Server existente.
+## Regras de negócio
 
-## Build e testes (na raiz, via .sln)
+### Fluxo de uma manutenção corretiva
+
+1. **Operador:** registra uma ocorrência para um equipamento.
+2. **Administrador:** cria uma ordem de serviço vinculada à ocorrência.
+3. **Técnico:** assume a OS, inicia o atendimento e registra a manutenção.
+4. **Técnico:** solicita a conclusão, informando se o problema foi resolvido.
+5. **API:** conclui a OS e atualiza os estados da ocorrência e do equipamento conforme o resultado.
+
+| Evento | Comportamento da API |
+|---|---|
+| Ocorrência registrada | Equipamento passa para `Parado` |
+| Manutenção iniciada | OS passa para `EmAtendimento` e equipamento para `EmManutencao` |
+| Problema resolvido | OS `Concluida`, ocorrência `Resolvida` e equipamento `Funcionando` |
+| Problema não resolvido | OS `Concluida`, ocorrência `Aberta` e equipamento `Parado` |
+
+Outras regras implementadas:
+
+- Um equipamento pode ter apenas uma ocorrência ativa por vez.
+- Cada ocorrência corretiva pode estar vinculada a uma única OS.
+- Uma OS preventiva pode ser criada a partir de um plano, sem ocorrência corretiva.
+- Somente o técnico responsável pode iniciar, registrar e concluir uma manutenção.
+- Dois técnicos não conseguem assumir simultaneamente a mesma OS.
+- Um plano com OS vinculada não pode ser transferido para outro equipamento.
+- Datas de início e conclusão aceitam valores UTC com sufixo `Z`. Quando omitidas, a API utiliza o horário UTC do servidor.
+
+### Perfis e permissões
+
+| Funcionalidade | Administrador | Operador | Técnico |
+|---|:---:|:---:|:---:|
+| Consultar equipamentos e setores | Sim | Sim | Sim |
+| Registrar e consultar ocorrências | Sim | Sim | Não |
+| Consultar ordens de serviço | Sim | Não | Sim |
+| Assumir e executar manutenção | Não | Não | Sim |
+| Criar e cancelar ordens de serviço | Sim | Não | Não |
+| Gerenciar usuários, setores, equipamentos e planos | Sim | Não | Não |
+| Consultar dashboard | Sim | Não | Não |
+
+A API atualmente permite que Administradores e Operadores registrem ocorrências. Essa permissão adicional do Administrador ainda depende de ratificação do grupo (D11).
+
+As decisões sobre a continuidade de manutenções não resolvidas (D1 e D2) também permanecem documentadas em [Pendências e decisões](docs/PENDENCIAS_E_DECISOES.md).
+
+## Instalação e execução
+
+### Pré-requisitos
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
+- SQL Server LocalDB, Express ou Developer.
+- Acesso à internet para restaurar os pacotes NuGet.
+
+Para gerenciar migrations manualmente, instale a ferramenta do Entity Framework Core:
+
+```powershell
+dotnet tool install --global dotnet-ef --version 8.0.11
+```
+
+### 1. Restaurar e compilar
+
+No terminal, abra a pasta principal do repositório, onde está o arquivo `SistemaManutencaoPIM.sln`:
 
 ```powershell
 dotnet restore
 dotnet build
-dotnet test    # 94 testes: unitários (SQLite) + integração HTTP (WebApplicationFactory)
 ```
 
-## Contratos que o frontend precisa respeitar
+### 2. Iniciar a API
 
-- **Campos obrigatórios (enum):** `perfil` (POST/PUT `/api/usuarios`), `prioridade` (POST `/api/ocorrencias`) e `tipoManutencao` (POST `/api/ordens-servico`) — omissão ou `null` devolve `400` com detalhe por campo. Nunca omita: a omissão de `perfil` já criou silenciosamente um Administrador no passado.
-- **Permissões por perfil** (conforme o ResumoPIM): ocorrências (leitura/POST) → Admin/Operador; OS (leitura) → Admin/Técnico; assumir/iniciar/registrar/concluir → Técnico; criar/cancelar OS, planos, usuários, setores, escrita de equipamentos e dashboard → Admin; consulta de equipamentos/setores → qualquer autenticado. Matriz completa em `docs/CONTRATOS_API.md`, `docs/openapi.json` e no Swagger.
-- **`GET /api/ocorrencias/minhas`** (Admin/Operador): ocorrências registradas pelo usuário logado — tela inicial do Operador no mobile.
-- **Filtros de ocorrências:** `?busca=` (texto na descrição ou nome do equipamento), `?status=`, `?equipamentoId=` (combináveis).
-- **Erros:** negócio/401/403 → envelope `{"erro":"mensagem"}` (inclusive corpos de 401/403 do middleware JWT); validação 400 → `ValidationProblemDetails` com `errors` por campo — trate ambos no cliente.
-- **CORS:** em Development libera `http://localhost:3000`, `http://localhost:5173` e `http://localhost:8080` (`Cors:Origens`); em produção configure `Cors:Origens` com as origens reais — sem a chave, nenhuma origem é liberada.
-- **Datas em UTC** — converter para o fuso local na exibição.
-- **Datas da manutenção:** `POST /iniciar` aceita corpo opcional `{"dataInicio":"2026-10-20T10:00:00Z"}`; `POST /concluir` aceita `dataConclusao`. Ambas são opcionais, exigem UTC com `Z`, e usam o horário UTC do servidor quando omitidas. Conclusão anterior ao início retorna 400.
-- **Conclusão da OS:** se diagnóstico e serviço já foram registrados, basta enviar `problemaResolvido` (e opcionalmente `dataConclusao`/`observacoes`). Sem registro anterior, envie também `diagnostico` e `servicoRealizado`. Observações omitidas permanecem como estavam.
-
-## Teste básico no Swagger
-
-1. POST `/api/auth/login`: `{"email":"admin@pim.local","senha":"senha_digitada_no_script"}`.
-2. Copie o `token`; em **Authorize**, cole apenas o token.
-3. POST `/api/setores`: `{"nome":"Producao"}`.
-4. POST `/api/equipamentos`: `{"nome":"Prensa 01","patrimonio":"PAT-001","setorId":1}`.
-5. POST `/api/usuarios` duas vezes: um Operador e um Técnico (exemplos em `docs/CONTRATOS_API.md`).
-6. Login como Operador. POST `/api/ocorrencias` (`prioridade` obrigatória). GET `/api/ocorrencias/minhas`.
-7. Login de Admin. POST `/api/ordens-servico` (`tipoManutencao` obrigatório) para a ocorrência criada.
-8. Login como Técnico. POST `/{id}/assumir`, POST `/{id}/iniciar` com `dataInicio` opcional UTC, PUT `/{id}/manutencao` (opcional), POST `/{id}/concluir` com `problemaResolvido` e `dataConclusao` opcional; os textos podem ser informados antes ou na conclusão.
-9. Login de Admin. GET `/api/equipamentos/{id}` → `"Funcionando"`; GET `/api/ocorrencias/{id}` → `"Resolvida"`.
-10. Repita com outro equipamento e `problemaResolvido: false` (OS Concluída, ocorrência segue Aberta, equipamento Parado).
-
-IDs acima são exemplos; use os IDs reais retornados nas respostas.
-
-## Se aparecerem erros
-
-- `'dotnet' não é reconhecido`: instalar o SDK ou reiniciar o terminal.
-- `LocalDB`/instância não encontrada: instalar SQL Server Express LocalDB ou configurar `ConnectionStrings__DefaultConnection` para um SQL Server existente.
-- `NU1301`/NuGet: internet indisponível, fontes NuGet bloqueadas ou falta `dotnet restore`.
-- `Login failed`: revisar string de conexão, autenticação do SQL Server e permissões.
-- `Jwt:Key`: iniciar pelo script (gera a chave) ou `dotnet user-secrets set "Jwt:Key" "SUA_CHAVE_LONGA_32_BYTES_MINIMO" --project .\SistemaManutencao.API`.
-- Admin não é criado: banco já tem usuários ou `SeedAdmin__Senha` não foi definido na primeira execução.
-- `dotnet ef` não encontrado: `dotnet tool install --global dotnet-ef --version 8.0.11`.
-
-## Migrations (tooling padrão)
+No Windows, utilizando PowerShell:
 
 ```powershell
-dotnet ef migrations list --project .\SistemaManutencao.API
-dotnet ef migrations add NomeDaMudanca --project .\SistemaManutencao.API
-dotnet ef database update --project .\SistemaManutencao.API
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\iniciar-dev.ps1
 ```
 
-Mudanças estruturais seguem o protocolo do grupo: alinhar com Léo antes de aplicar.
+O script configura o ambiente de desenvolvimento e utiliza `admin@pim.local` como e-mail padrão do administrador inicial.
 
-## Validação com SQL Server real
+Se `SeedAdmin__Senha` não estiver configurada, solicita uma senha. O administrador inicial só é cadastrado quando a tabela `Usuarios` está vazia.
 
-**Gate histórico (20/10/2026):** SQL Server 2022 (`mcr.microsoft.com/mssql/server:2022-latest`) em contêiner isolado, bind somente em loopback, migrations reais e API persistindo no SQL Server. Registro preciso: primeira sonda **42/43 PASS**; um payload inválido foi corrigido e o re-probe passou **8/8**. Não houve execução única final 43/43. Fluxos resolvido/não resolvido e atribuição concorrente foram observados; isso não é teste de estresse.
+Se `Jwt__Key` não estiver definida, o script gera uma chave aleatória para a execução. Tokens gerados anteriormente deixam de funcionar quando a API é reiniciada com uma chave diferente.
 
-- Schema local da API (aprovação de Léo ainda pendente): 7 tabelas; índices únicos com filtros confirmados no banco (`IX_Setores_Nome [Ativo]=(1)`, `IX_Ocorrencias_EquipamentoId [Status]<>(2)`, `IX_OrdensServicos_OcorrenciaId [OcorrenciaId] IS NOT NULL`, patrimônio, email, `Manutencao.OrdemServicoId`); 8 FKs `NO_ACTION` (Restrict).
-- Login PBKDF2/JWT real; 401 sem token/com senha errada; 403 por perfil e de técnico não-responsável; 409 de patrimônio/setor duplicados, 2ª ocorrência ativa e 2ª OS para a mesma ocorrência — observados por HTTP; as pré-validações da API podem rejeitar antes das restrições do banco.
-- Regra 1:1 confirmada por contagem direta na tabela (1 OS por ocorrência); senhas persistidas somente como hash PBKDF2 (4/4 na verificação direta, zero texto puro).
-- Fluxo completo resolvido: OS Concluída + Ocorrência Resolvida + Equipamento Funcionando; não resolvido: OS Concluída + Ocorrência Aberta + Equipamento Parado (Manutencao persistida com datas e `ProblemaResolvido`).
-- **Concorrência real**: dois técnicos assumindo a mesma OS simultaneamente → exatamente 1×200 e 1×409 (UPDATE atômico com predicado).
+Em Development, as migrations são aplicadas automaticamente conforme a configuração do projeto. É necessário ter uma instância SQL Server acessível.
 
-**Regressão direcionada desta revisão:** 13/13 PASS em SQL Server 2022 descartável, com banco novo e migrations reais: bloqueio da troca de equipamento com OS Aberta/EmAtendimento/Concluída, vínculo persistido, edição sem troca permitida, conclusão no equipamento original, desafio Bearer e declaração 409 no OpenAPI. Contêiner/volume e API temporária removidos. Não foram repetidos os testes do gate completo. Os testes de regressão permanentes estão em `HttpPlanoVinculoTests`, `HttpBearerChallengeTests`, `HttpRevogacaoTests` e `HttpOpenApiErrosTests`.
+Por padrão, o Swagger fica disponível em:
 
-**Limites da evidência histórica:** a sonda de filtro combinado verificava somente status HTTP; a identificação do técnico vencedor usava ordem de retorno das threads, não sua identidade. A observação de uma resposta 200 e outra 409 permanece válida. Confira detalhes em `docs/PENDENCIAS_E_DECISOES.md`.
+**http://localhost:5088/swagger**
 
-Reprodução local (Docker):
+Se não utilizar LocalDB, configure `ConnectionStrings__DefaultConnection` para um banco de desenvolvimento.
 
-```powershell
-docker run -d --name pim-mssql-gate -p 127.0.0.1:14330:1433 -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=<senha-forte>" -e MSSQL_PID=Developer mcr.microsoft.com/mssql/server:2022-latest
-dotnet ef database update --project .\SistemaManutencao.API --connection "Server=127.0.0.1,14330;Database=SistemaManutencaoPIM_GATE;User Id=sa;Password=<senha-forte>;TrustServerCertificate=True"
-# inicie a API apontando ConnectionStrings__DefaultConnection para o mesmo banco e execute a coleção Postman ate o fim
+Não utilize o banco compartilhado do grupo sem alinhar previamente a estrutura com o responsável pelo SQL Server.
+
+## Autenticação JWT
+
+O login é feito pelo endpoint:
+
+`POST /api/auth/login`
+
+Exemplo de requisição:
+
+```json
+{
+  "email": "admin@pim.local",
+  "senha": "SENHA_DEFINIDA_NA_INICIALIZACAO"
+}
 ```
 
-Pendente para o ambiente do grupo (sem autorização implícita neste README): aplicar `database update` no SQL Server compartilhado (alinhado com Léo) e rodar a coleção Postman ponta a ponta.
+A resposta contém o token JWT, o tipo `Bearer`, a expiração em UTC e os dados do usuário autenticado.
 
-## Documentação disponível
+Nas rotas protegidas, utilize:
 
-- `docs/CONTRATOS_API.md`: endpoints, permissões e exemplos JSON (contrato oficial em texto).
-- `docs/openapi.json`: documento OpenAPI exportado do código em execução; Bearer consta nas operações protegidas e login/health são públicos.
-- `docs/SistemaManutencaoPIM.postman_collection.json`: demonstração em sequência (21 requisições).
-- `docs/ROTEIRO_APRESENTACAO.md`: fala curta para o professor e sequência da demonstração.
-- `docs/PENDENCIAS_E_DECISOES.md`: alinhamentos pendentes com Léo, Gustavo e Marcos.
-- `docs/ENTREGA_EQUIPE.md`: resumo de integração e roteiro para Léo, Gustavo e Marcos.
-- `tests/SistemaManutencao.Tests/`: testes unitários e integração HTTP; execute `dotnet test` para a contagem atual.
-
-## Publicar no GitHub
-
-Entrega do backend preparada com ressalvas de integração. D1/D2, D11 e alinhamento do modelo com Léo permanecem pendentes; D5/D12 foram implementados de forma compatível com os clientes atuais. Consulte `docs/PENDENCIAS_E_DECISOES.md` e `docs/ENTREGA_EQUIPE.md`.
-
-## Estrutura
-
+```http
+Authorization: Bearer <token>
 ```
+
+Para consultar os dados do usuário logado:
+
+```http
+GET /api/auth/me
+Authorization: Bearer <token>
+```
+
+As permissões são verificadas pela API. O acesso pode ser negado quando o token está ausente, expirado, inválido ou quando o usuário não possui a autorização necessária.
+
+Não publique tokens, senhas ou chaves em arquivos versionados.
+
+## Testando pelo Swagger
+
+Com a API e o banco de desenvolvimento em execução, é possível demonstrar o fluxo corretivo:
+
+1. Faça login como Administrador em `/api/auth/login` e configure o token no botão **Authorize**.
+2. Cadastre um setor, um equipamento, um Operador e um Técnico.
+3. Entre como Operador e registre uma ocorrência em `POST /api/ocorrencias`.
+4. Entre como Administrador e crie uma OS corretiva em `POST /api/ordens-servico`.
+5. Entre como Técnico e utilize as ações `assumir` e `iniciar` da OS.
+6. Registre diagnóstico e serviço realizado em `PUT /api/ordens-servico/{id}/manutencao`, ou informe esses textos diretamente na conclusão.
+7. Conclua a OS em `POST /api/ordens-servico/{id}/concluir`, informando `problemaResolvido`.
+8. Consulte novamente a OS, a ocorrência e o equipamento para conferir os estados atualizados.
+
+Os campos `prioridade`, `tipoManutencao` e `perfil` são obrigatórios nos respectivos contratos.
+
+Utilize os IDs reais retornados pela API. Os exemplos da documentação são apenas ilustrativos.
+
+Uma coleção Postman com **21 requisições organizadas em sequência** também está disponível:
+
+[Coleção Postman](docs/SistemaManutencaoPIM.postman_collection.json)
+
+## Contratos e respostas de erro
+
+Os clientes React e Flutter devem seguir os contratos publicados em [docs/CONTRATOS_API.md](docs/CONTRATOS_API.md).
+
+Pontos importantes para integração:
+
+- As respostas utilizam JSON com propriedades em `camelCase`.
+- Os enums são representados como texto.
+- Datas de manutenção devem ser enviadas em UTC, com sufixo `Z`.
+- `dataInicio` e `dataConclusao` são opcionais.
+- A data de conclusão não pode ser anterior ao início da manutenção.
+- Diagnóstico e serviço realizado podem ser registrados durante o atendimento ou informados na conclusão.
+- Observações anteriormente registradas são preservadas quando omitidas na conclusão.
+
+### Status HTTP
+
+| Status | Significado |
+|---|---|
+| `400` | Dados inválidos ou requisitos da operação não atendidos |
+| `401` | Falha de autenticação |
+| `403` | Usuário sem permissão |
+| `404` | Recurso não encontrado |
+| `409` | Conflito com o estado ou regras de negócio |
+| `500` | Erro interno inesperado |
+
+Erros de negócio e de autenticação/autorização utilizam o formato:
+
+```json
+{
+  "erro": "Mensagem descritiva"
+}
+```
+
+Erros automáticos de validação de modelo utilizam `ValidationProblemDetails`, com os detalhes no campo `errors`.
+
+Os clientes devem tratar os dois formatos.
+
+### CORS
+
+No ambiente Development, estão configuradas as origens:
+
+- `http://localhost:3000`
+- `http://localhost:5173`
+- `http://localhost:8080`
+
+Em outros ambientes, configure `Cors:Origens` conforme os endereços utilizados pelo frontend. Sem origens configuradas, nenhuma origem de navegador é liberada por essa política.
+
+## Testes e validação
+
+A API possui testes unitários e testes de integração HTTP, utilizando SQLite em memória e `WebApplicationFactory`.
+
+O último resultado reportado pelo Codex foi:
+
+- **96/96 testes aprovados.**
+- Compilação sem erros ou avisos.
+
+Esses resultados pertencem à execução anterior à preparação deste README.
+
+### Validação histórica com SQL Server
+
+Também foram realizadas verificações anteriores em SQL Server 2022, utilizando um banco temporário isolado.
+
+O histórico registra:
+
+- Primeira execução com 42/43 verificações aprovadas.
+- Correção de um payload da sonda, seguida de reexecução direcionada com 8/8 aprovações.
+- Regressão posterior com 13/13 verificações aprovadas.
+
+Essas validações abrangeram fluxos de manutenção, integridade dos relacionamentos, restrições de unicidade, autenticação e atribuição concorrente de ordens de serviço.
+
+Não houve uma execução única final de 43/43 verificações, nem teste de carga.
+
+A integração da versão final com o SQL Server definitivo do grupo e a demonstração ponta a ponta nesse ambiente ainda precisam ser realizadas após o alinhamento do esquema.
+
+## Integração com a equipe
+
+Este repositório entrega a API utilizada pelos demais componentes do PIM.
+
+| Área | Responsabilidade |
+|---|---|
+| Banco de dados | Compatibilizar o esquema SQL Server e seus relacionamentos com a API |
+| Frontend React | Consumir os endpoints administrativos, autenticação e dashboard |
+| Aplicativo Flutter | Consumir login, ocorrências e fluxos de atendimento de OS |
+
+A API utiliza suas próprias entidades e migrations. Antes da integração definitiva, o esquema precisa ser comparado com o modelo acordado pela equipe, incluindo chaves estrangeiras, índices e campos opcionais.
+
+O guia de integração está disponível em:
+
+[Integração do backend com a equipe](docs/ENTREGA_EQUIPE.md)
+
+## Estrutura do repositório
+
+```text
 SistemaManutencaoPIM/
 ├── SistemaManutencaoPIM.sln
 ├── SistemaManutencao.API/
-│   ├── Controllers/       # HTTP, permissões e contratos de resposta
-│   ├── Services/          # Login, ocorrência, OS e regras de negócio
-│   ├── Models/            # 7 entidades
-│   ├── DTOs/              # Contratos de entrada/saída e validações
-│   ├── Data/              # DbContext, seed do admin e fábrica de design-time
-│   ├── Enums/             # Perfis, status e tipos
-│   ├── Helpers/           # Erros de negócio e identidade do usuário logado
-│   ├── Migrations/        # Estrutura versionada do banco (tooling padrão)
-│   └── Program.cs         # JWT, CORS, DI, tratamento de erros, Swagger
-├── tests/SistemaManutencao.Tests/   # testes unitários e integração HTTP
-├── docs/                  # Contratos, OpenAPI, Postman, pendências
-└── scripts/iniciar-dev.ps1
+│   ├── Controllers/
+│   ├── Services/
+│   ├── Models/
+│   ├── DTOs/
+│   ├── Data/
+│   ├── Enums/
+│   ├── Helpers/
+│   ├── Migrations/
+│   └── Program.cs
+├── tests/
+│   └── SistemaManutencao.Tests/
+├── docs/
+└── scripts/
+    └── iniciar-dev.ps1
 ```
 
-**Não** inclui telas web, mobile ou um servidor de banco embarcado — o SQL Server é externo à API, conforme a arquitetura pedida no PIM.
+## Documentação
+
+- [Contratos da API](docs/CONTRATOS_API.md): endpoints, permissões e exemplos JSON.
+- [OpenAPI](docs/openapi.json): especificação das operações.
+- [Coleção Postman](docs/SistemaManutencaoPIM.postman_collection.json): demonstração por requisições HTTP.
+- [Guia de integração](docs/ENTREGA_EQUIPE.md): orientações para os integrantes da equipe.
+- [Roteiro de apresentação](docs/ROTEIRO_APRESENTACAO.md): sequência para demonstrar o projeto.
+- [Pendências e decisões](docs/PENDENCIAS_E_DECISOES.md): regras e alinhamentos ainda necessários.
+
+Este repositório contém somente o **Backend/API do PIM**. As aplicações React e Flutter, o banco compartilhado e sua integração definitiva fazem parte das demais etapas do projeto em grupo.
