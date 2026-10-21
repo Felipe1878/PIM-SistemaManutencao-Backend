@@ -27,7 +27,9 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);"
+              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);",
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"JWT recebido\", () => pm.expect(pm.response.json().token).to.be.a(\"string\").and.not.empty);"
             ]
           }
         }
@@ -64,7 +66,9 @@
           "listen": "test",
           "script": {
             "exec": [
-              "if (pm.response.code < 300) pm.collectionVariables.set(\"setorId\", pm.response.json().id);"
+              "if (pm.response.code < 300) pm.collectionVariables.set(\"setorId\", pm.response.json().id);",
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"ID criado\", () => pm.expect(pm.response.json().id).to.be.a(\"number\").and.above(0));"
             ],
             "type": "text/javascript"
           }
@@ -102,7 +106,10 @@
           "listen": "test",
           "script": {
             "exec": [
-              "if (pm.response.code < 300) pm.collectionVariables.set(\"equipamentoId\", pm.response.json().id);"
+              "if (pm.response.code < 300) pm.collectionVariables.set(\"equipamentoId\", pm.response.json().id);",
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"ID criado\", () => pm.expect(pm.response.json().id).to.be.a(\"number\").and.above(0));",
+              "pm.test(\"Estado esperado\", () => { pm.expect(pm.response.json().status).to.eql(\"Funcionando\"); });"
             ],
             "type": "text/javascript"
           }
@@ -134,7 +141,19 @@
             }
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"ID criado\", () => pm.expect(pm.response.json().id).to.be.a(\"number\").and.above(0));"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "05 - Criar técnico",
@@ -161,7 +180,19 @@
             }
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"ID criado\", () => pm.expect(pm.response.json().id).to.be.a(\"number\").and.above(0));"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "06 - Login operador",
@@ -185,7 +216,9 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);"
+              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);",
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"JWT recebido\", () => pm.expect(pm.response.json().token).to.be.a(\"string\").and.not.empty);"
             ]
           }
         }
@@ -222,7 +255,10 @@
           "listen": "test",
           "script": {
             "exec": [
-              "if (pm.response.code < 300) pm.collectionVariables.set(\"ocorrenciaId\", pm.response.json().id);"
+              "if (pm.response.code < 300) pm.collectionVariables.set(\"ocorrenciaId\", pm.response.json().id);",
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"ID criado\", () => pm.expect(pm.response.json().id).to.be.a(\"number\").and.above(0));",
+              "pm.test(\"Estado esperado\", () => { pm.expect(pm.response.json().status).to.eql(\"Aberta\"); });"
             ],
             "type": "text/javascript"
           }
@@ -251,7 +287,9 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);"
+              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);",
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"JWT recebido\", () => pm.expect(pm.response.json().token).to.be.a(\"string\").and.not.empty);"
             ]
           }
         }
@@ -288,7 +326,10 @@
           "listen": "test",
           "script": {
             "exec": [
-              "if (pm.response.code < 300) pm.collectionVariables.set(\"osId\", pm.response.json().id);"
+              "if (pm.response.code < 300) pm.collectionVariables.set(\"osId\", pm.response.json().id);",
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"ID criado\", () => pm.expect(pm.response.json().id).to.be.a(\"number\").and.above(0));",
+              "pm.test(\"Estado esperado\", () => { pm.expect(pm.response.json().status).to.eql(\"Aberta\"); });"
             ],
             "type": "text/javascript"
           }
@@ -317,7 +358,9 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);"
+              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);",
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"JWT recebido\", () => pm.expect(pm.response.json().token).to.be.a(\"string\").and.not.empty);"
             ]
           }
         }
@@ -339,7 +382,21 @@
             }
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Estado esperado\", () => { pm.expect(pm.response.json().status).to.eql(\"Aberta\"); });",
+              "pm.test(\"OS correta\", () => { pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get(\"osId\"))); });",
+              "pm.test(\"Tecnico atribuido\", () => { pm.expect(pm.response.json().tecnicoId).to.be.a(\"number\").and.above(0); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "12 - Iniciar OS",
@@ -366,7 +423,20 @@
             }
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Estado esperado\", () => { pm.expect(pm.response.json().status).to.eql(\"EmAtendimento\"); });",
+              "pm.test(\"OS correta\", () => { pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get(\"osId\"))); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "13 - Registrar manutenção",
@@ -393,7 +463,19 @@
             }
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Registro da manutencao\", () => { const body = pm.response.json(); const enviado = JSON.parse(pm.request.body.raw); [\"diagnostico\", \"servicoRealizado\", \"observacoes\"].forEach(k => pm.expect(body[k]).to.eql(enviado[k].trim())); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "14 - Concluir OS",
@@ -420,7 +502,37 @@
             }
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Estado esperado\", () => { pm.expect(pm.response.json().status).to.eql(\"Concluida\"); });",
+              "pm.test(\"OS correta\", () => { pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get(\"osId\"))); });",
+              "pm.test(\"Resultado e cronologia UTC\", () => { const body = pm.response.json(); pm.expect(body.problemaResolvido).to.eql(true); pm.expect(body.dataInicio).to.match(/Z$/); pm.expect(body.dataConclusao).to.match(/Z$/); pm.expect(Date.parse(body.dataConclusao)).to.be.at.least(Date.parse(body.dataInicio)); });",
+              "pm.sendRequest({",
+              "  url: pm.variables.replaceIn(\"{{baseUrl}}/api/ordens-servico/{{osId}}\"),",
+              "  method: \"GET\", header: { Authorization: \"Bearer \" + pm.collectionVariables.get(\"token\") }",
+              "}, (erro, resposta) => {",
+              "  pm.test(\"OS persistida e textos preservados apos concluir\", () => {",
+              "    pm.expect(erro).to.equal(null);",
+              "    pm.expect(resposta.code).to.eql(200);",
+              "    const os = resposta.json();",
+              "    pm.expect(os.id).to.eql(Number(pm.collectionVariables.get(\"osId\")));",
+              "    pm.expect(os.status).to.eql(\"Concluida\");",
+              "    pm.expect(os.manutencao.problemaResolvido).to.eql(true);",
+              "    pm.expect(os.manutencao.diagnostico).to.eql(\"Fiação danificada no motor\");",
+              "    pm.expect(os.manutencao.servicoRealizado).to.eql(\"Substituicao da fiacao\");",
+              "    pm.expect(os.manutencao.observacoes).to.eql(\"Teste do motor realizado\");",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "15 - Consultar equipamento",
@@ -438,7 +550,20 @@
             }
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Estado esperado\", () => { pm.expect(pm.response.json().status).to.eql(\"Funcionando\"); });",
+              "pm.test(\"Equipamento correto\", () => { pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get(\"equipamentoId\"))); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "15b - Login admin novamente (GET ocorrência exige Admin/Operador)",
@@ -462,7 +587,9 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);"
+              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);",
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"JWT recebido\", () => pm.expect(pm.response.json().token).to.be.a(\"string\").and.not.empty);"
             ]
           }
         }
@@ -484,7 +611,20 @@
             }
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Estado esperado\", () => { pm.expect(pm.response.json().status).to.eql(\"Resolvida\"); });",
+              "pm.test(\"Ocorrencia correta\", () => { pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get(\"ocorrenciaId\"))); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "17 - Login operador (minhas ocorrências)",
@@ -508,7 +648,9 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);"
+              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);",
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"JWT recebido\", () => pm.expect(pm.response.json().token).to.be.a(\"string\").and.not.empty);"
             ]
           }
         }
@@ -537,7 +679,9 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "if (pm.response.code !== 200) throw new Error('Esperado 200 em minhas ocorrencias (recebido ' + pm.response.code + ')');"
+              "if (pm.response.code !== 200) throw new Error('Esperado 200 em minhas ocorrencias (recebido ' + pm.response.code + ')');",
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Ocorrencia resolvida nas minhas ocorrencias\", () => { const ocorrencia = pm.response.json().find(x => x.id === Number(pm.collectionVariables.get(\"ocorrenciaId\"))); pm.expect(ocorrencia).to.exist; pm.expect(ocorrencia.status).to.eql(\"Resolvida\"); });"
             ]
           }
         }
@@ -565,7 +709,9 @@
           "script": {
             "type": "text/javascript",
             "exec": [
-              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);"
+              "if (pm.response.code === 200) pm.collectionVariables.set(\"token\", pm.response.json().token);",
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"JWT recebido\", () => pm.expect(pm.response.json().token).to.be.a(\"string\").and.not.empty);"
             ]
           }
         }
@@ -587,7 +733,19 @@
             }
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Filtro encontra ocorrencia criada\", () => { pm.expect(pm.response.json().some(x => x.id === Number(pm.collectionVariables.get(\"ocorrenciaId\")))).to.eql(true); });"
+            ]
+          }
+        }
+      ]
     }
   ],
   "variable": [

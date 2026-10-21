@@ -21,7 +21,10 @@ Comparação feita com a seção de banco do Word; nenhum DDL/modelo executável
 
 ## Evidência e publicação
 
-- Build desta entrega: 0 erros/0 avisos; suíte: 94/94 testes (44 unitários + 50 HTTP), executados localmente sobre SQLite in-memory/WebApplicationFactory. OpenAPI exportado do servidor local com banco não acessado. As verificações SQL Server abaixo são históricas e não foram repetidas nesta entrega.
+- Rodada de qualidade de 20/10/2026: `dotnet build SistemaManutencaoPIM.sln --no-restore --verbosity minimal` com 0 erros/0 avisos; `dotnet test tests/SistemaManutencao.Tests/SistemaManutencao.Tests.csproj --no-build --no-restore --verbosity minimal` com **106/106 aprovados**, 0 falhas e 0 ignorados. Dez casos novos cobrem tamanho após Trim e preservação de registros em entradas rejeitadas. Os testes HTTP usam SQLite in-memory.
+- SQL Server real não foi validado nesta rodada: nenhum serviço MSSQL ou ferramenta LocalDB/sqlcmd encontrado; Docker negou acesso ao daemon local. Nenhuma instância de SQL Server foi acessada nesta rodada.
+- Postman: 21 scripts tiveram a sintaxe JavaScript validada; sequência, requests e variáveis existentes preservados. As novas asserções ainda não foram executadas no Postman contra uma API.
+- Build anterior a esta rodada de qualidade: 0 erros/0 avisos; suíte: 96/96 testes, executados localmente sobre SQLite in-memory/WebApplicationFactory. OpenAPI exportado do servidor local com banco não acessado. As verificações SQL Server abaixo são históricas e não foram repetidas nesta entrega.
 - O gate histórico teve 42/43 verificações no primeiro script; a falha era payload inválido da sonda e o re-probe corrigido passou 8/8. Não houve uma execução única final 43/43. A sonda de filtro combinado verificava apenas os status HTTP, não o conteúdo; a escolha do técnico vencedor dependia indevidamente da ordem de conclusão das threads. A observação de uma resposta 200 e outra 409 permanece válida, mas não equivale a teste de estresse.
 - Login de email inexistente executa PBKDF2 fictício para mitigar o caminho rápido; não há comprovação de tempo constante nem de eliminação completa de canal de timing.
 - Publicável como backend com limitações declaradas. Não apresentar como solução de negócio integralmente aprovada antes das decisões acima e do alinhamento do esquema.

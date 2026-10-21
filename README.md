@@ -240,12 +240,12 @@ Em outros ambientes, configure `Cors:Origens` conforme os endereços utilizados 
 
 A API possui testes unitários e testes de integração HTTP, utilizando SQLite em memória e `WebApplicationFactory`.
 
-O último resultado reportado pelo Codex foi:
+O último resultado reportado pelo Astra foi:
 
-- **96/96 testes aprovados.**
-- Compilação sem erros ou avisos.
+- **106/106 testes aprovados, 0 falhas e 0 ignorados.**
+- Compilação com 0 erros e 0 avisos.
 
-Esses resultados pertencem à execução anterior à preparação deste README.
+Esses resultados pertencem à rodada de qualidade anterior do Astra; nenhuma nova execução foi realizada nesta atualização documental.
 
 ### Validação histórica com SQL Server
 
