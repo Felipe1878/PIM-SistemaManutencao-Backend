@@ -191,7 +191,10 @@ namespace SistemaManutencao.API.Migrations
 
                     b.HasIndex("TecnicoId");
 
-                    b.ToTable("OrdensServicos", (string)null);
+                    b.ToTable("OrdensServicos", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OrdensServicos_TipoOrigem", "([TipoManutencao] = 0 AND [OcorrenciaId] IS NOT NULL AND [PlanoManutencaoId] IS NULL) OR ([TipoManutencao] = 1 AND [PlanoManutencaoId] IS NOT NULL AND [OcorrenciaId] IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("SistemaManutencao.API.Models.PlanoManutencao", b =>

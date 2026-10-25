@@ -8,3 +8,6 @@
 *.db
 *.sqlite*
 secrets.json
+
+# Script local de testes manuais — mantido fora do repositório nesta etapa
+scripts/testes-18-34.ps1

@@ -61,7 +61,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         });
         b.Entity<OrdemServico>(e =>
         {
-            e.ToTable("OrdensServicos"); e.HasKey(x => x.Id);
+            // Constraint de origem/tipo da OS: espelha OrdemServicoService.CriarAsync no SGBD.
+            // Corretiva (0) exige ocorrência e proíbe plano; preventiva (1) exige plano e proíbe ocorrência.
+            e.ToTable("OrdensServicos", t =>
+                t.HasCheckConstraint("CK_OrdensServicos_TipoOrigem",
+                    "([TipoManutencao] = 0 AND [OcorrenciaId] IS NOT NULL AND [PlanoManutencaoId] IS NULL) " +
+                    "OR ([TipoManutencao] = 1 AND [PlanoManutencaoId] IS NOT NULL AND [OcorrenciaId] IS NULL)"));
+            e.HasKey(x => x.Id);
             e.HasOne(x => x.Ocorrencia).WithOne(x => x!.OrdemServico)
              .HasForeignKey<OrdemServico>(x => x.OcorrenciaId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => x.OcorrenciaId).IsUnique().HasFilter("[OcorrenciaId] IS NOT NULL");

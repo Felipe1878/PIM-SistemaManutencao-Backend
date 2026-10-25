@@ -1,12 +1,14 @@
-# Sistema de Manutenção Industrial — API
+# Sistema de Manutenção Industrial — Backend e Banco de Dados
 
-**Backend REST API | ASP.NET Core 8**
+**API REST | ASP.NET Core 8 + Entity Framework Core 8.0.11 + SQL Server**
 
-API desenvolvida como parte de um Projeto Integrado Multidisciplinar (PIM), responsável pelo gerenciamento de equipamentos, ocorrências e ordens de serviço de manutenção industrial.
+Sistema de gestão de manutenção industrial (CMMS) desenvolvido como Projeto Integrado Multidisciplinar (PIM). O backend centraliza autenticação, regras de negócio e o acesso aos dados de equipamentos, ocorrências, ordens de serviço, manutenções corretivas e planos preventivos.
 
-O backend centraliza a autenticação, as regras de negócio e o acesso aos dados. As aplicações web (React) e mobile (Flutter), desenvolvidas pelos demais integrantes da equipe, utilizam seus endpoints HTTP.
+As aplicações web (React) e mobile (Flutter), desenvolvidas pelos demais integrantes da equipe, consomem os endpoints HTTP desta API. Nenhum cliente acessa o SQL Server diretamente.
 
-Este repositório contém exclusivamente a **API do projeto**, incluindo código-fonte, migrations, testes e documentação de integração.
+Este repositório entrega o **Backend e o Banco de Dados do PIM**: código-fonte, migrations, modelo físico, testes e documentação de integração.
+
+O modelo físico aprovado pelo grupo vale como banco oficial do projeto (`SistemaManutencaoPIM`). Alterações de esquema passam a ser feitas apenas por migrations deste repositório, nunca por edição direta no banco.
 
 ## Principais funcionalidades
 
@@ -26,22 +28,46 @@ A referência completa de endpoints está disponível em [Contratos da API](docs
 | Tecnologia | Utilização |
 |---|---|
 | C# / ASP.NET Core 8 | Desenvolvimento da API REST |
-| Entity Framework Core | Persistência, relacionamentos e migrations |
-| SQL Server | Banco de dados relacional |
+| Entity Framework Core 8.0.11 | Persistência, relacionamentos e migrations |
+| SQL Server | Banco de dados relacional (LocalDB em desenvolvimento) |
 | JWT Bearer | Autenticação e autorização |
 | Swagger / OpenAPI | Documentação dos endpoints |
 | Postman | Demonstração dos fluxos HTTP |
-| xUnit / WebApplicationFactory / SQLite | Testes automatizados |
+| xUnit / WebApplicationFactory / SQLite | Testes automatizados de API |
+| xUnit / SQL Server real | Testes de integração da CHECK de tipo de origem |
 
 A API mantém as regras de negócio nos serviços, enquanto os controllers recebem as requisições HTTP e os DTOs definem os contratos de entrada e saída.
 
-```text
-React (Web) ──────┐
-                  ├── HTTP/JSON ──> API ASP.NET Core ──> EF Core ──> SQL Server
-Flutter (Mobile) ─┘
+```mermaid
+flowchart LR
+    R["React (Web)"] -->|HTTP/JSON| A["API ASP.NET Core"]
+    F["Flutter (Mobile)"] -->|HTTP/JSON| A
+    A -->|EF Core| S[("SQL Server")]
 ```
 
 Os clientes não acessam o banco diretamente. Toda comunicação com os dados passa pela API.
+
+## Modelo de dados
+
+O esquema físico definido neste repositório:
+
+- **7 tabelas:** `Usuarios`, `Setores`, `Equipamentos`, `Ocorrencias`, `OrdensServicos`, `Manutencoes` e `PlanosManutencao`.
+- **8 chaves estrangeiras**, todas com exclusão `Restrict` (nenhuma exclusão em cascata).
+- **6 índices únicos**, sendo 3 filtrados (parciais).
+- **CHECK `CK_OrdensServicos_TipoOrigem`:** ordem corretiva exige `OcorrenciaId` e não pode ter `PlanoManutencaoId`; ordem preventiva exige `PlanoManutencaoId` e não pode ter `OcorrenciaId`.
+
+Em relação ao modelo do DOCX da disciplina, o grupo aprovou as extensões abaixo, todas registradas no dicionário de dados:
+
+- `OrdemServico.OcorrenciaId` nullable, para permitir ordens preventivas sem ocorrência.
+- `OrdemServico.PlanoManutencaoId`, que registra a origem preventiva da ordem.
+- `Manutencao.ProblemaResolvido`, resultado informado pelo técnico na conclusão.
+- `TempoExecucao` não é persistido: é calculado como `DataConclusao - DataInicio`.
+
+Documentação do banco:
+
+- [DER e modelo físico](docs/DER_MODELO_FISICO.md): diagrama, tabelas, chaves e índices.
+- [Dicionário de dados](docs/DICIONARIO_DADOS.md): colunas, tipos, nulabilidade e domínios.
+- [Guia de banco de dados](docs/GUIA_BANCO_INTEGRACAO.md): configuração, migrations, backup e handoff.
 
 ## Regras de negócio
 
@@ -109,7 +135,24 @@ dotnet restore
 dotnet build
 ```
 
-### 2. Iniciar a API
+### 2. Aplicar as migrations (caminho controlado)
+
+Duas migrations compõem o esquema atual:
+
+| Migration | Conteúdo | Situação no banco oficial |
+|---|---|---|
+| `20261020021711_InitialCreate` | Criação das 7 tabelas, 8 FKs, índices e constraints | Aplicada |
+| `20261023061811_OrdemServicoTipoOrigemCheck` | CHECK `CK_OrdensServicos_TipoOrigem` | Pendente de autorização |
+
+Para aplicar de forma controlada, com o banco alvo definido pela connection string:
+
+```powershell
+dotnet ef database update --project SistemaManutencao.API
+```
+
+A segunda migration só deve ser aplicada no banco oficial após a auditoria prévia e a autorização do grupo, conforme o procedimento de [Guia de banco de dados, seção 8.3](docs/GUIA_BANCO_INTEGRACAO.md).
+
+### 3. Iniciar a API
 
 No Windows, utilizando PowerShell:
 
@@ -120,11 +163,17 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 O script configura o ambiente de desenvolvimento e utiliza `admin@pim.local` como e-mail padrão do administrador inicial.
 
-Se `SeedAdmin__Senha` não estiver configurada, solicita uma senha. O administrador inicial só é cadastrado quando a tabela `Usuarios` está vazia.
+Se `SeedAdmin__Senha` não estiver configurada, solicita uma senha. O seed é idempotente (`Data/DbInitializer.cs`): o administrador só é cadastrado quando a tabela `Usuarios` está vazia.
 
 Se `Jwt__Key` não estiver definida, o script gera uma chave aleatória para a execução. Tokens gerados anteriormente deixam de funcionar quando a API é reiniciada com uma chave diferente.
 
-Em Development, as migrations são aplicadas automaticamente conforme a configuração do projeto. É necessário ter uma instância SQL Server acessível.
+Atenção ao flag automático de migrations em Development. Com `Database:ApplyMigrationsOnStartup = true` (configuração atual de `appsettings.Development.json`), qualquer boot da API aplica todas as migrations pendentes no banco apontado pela connection string (`Program.cs:117-127`), incluindo a CHECK ainda não autorizada. Para iniciar sem aplicar migrations:
+
+```powershell
+$env:Database__ApplyMigrationsOnStartup = "false"
+```
+
+Esse fluxo está detalhado em [Guia de banco de dados, seção 2.2](docs/GUIA_BANCO_INTEGRACAO.md).
 
 Por padrão, o Swagger fica disponível em:
 
@@ -154,14 +203,14 @@ A resposta contém o token JWT, o tipo `Bearer`, a expiração em UTC e os dados
 Nas rotas protegidas, utilize:
 
 ```http
-Authorization: Bearer <token>
+Authorization: Bearer ***
 ```
 
 Para consultar os dados do usuário logado:
 
 ```http
 GET /api/auth/me
-Authorization: Bearer <token>
+Authorization: Bearer ***
 ```
 
 As permissões são verificadas pela API. O acesso pode ser negado quando o token está ausente, expirado, inválido ou quando o usuário não possui a autorização necessária.
@@ -238,46 +287,58 @@ Em outros ambientes, configure `Cors:Origens` conforme os endereços utilizados 
 
 ## Testes e validação
 
-A API possui testes unitários e testes de integração HTTP, utilizando SQLite em memória e `WebApplicationFactory`.
+A suíte tem **114 casos de teste, todos aprovados na última execução (114/114, 0 falhas, 0 ignorados)**, em duas camadas:
 
-O último resultado reportado pelo Astra foi:
+| Camada | Casos | Recursos |
+|---|---|---|
+| API e regras de negócio | 106 | xUnit, `WebApplicationFactory` e SQLite em memória |
+| Integração com SQL Server real | 8 | Classe `SqlServerTipoOrigemCheckTests`, trait `Categoria=SqlServer` |
 
-- **106/106 testes aprovados, 0 falhas e 0 ignorados.**
-- Compilação com 0 erros e 0 avisos.
+Os 8 testes de SQL Server exercitam a CHECK `CK_OrdensServicos_TipoOrigem` em um banco descartável (`SistemaManutencaoPIM_ValidationTemp`), criado e removido pelos próprios testes.
 
-Esses resultados pertencem à rodada de qualidade anterior do Astra; nenhuma nova execução foi realizada nesta atualização documental.
+### Como rodar
 
-### Validação histórica com SQL Server
+Suíte completa, que exige LocalDB disponível na máquina:
 
-Também foram realizadas verificações anteriores em SQL Server 2022, utilizando um banco temporário isolado.
+```powershell
+dotnet test
+```
 
-O histórico registra:
+Somente a camada SQLite/API, para máquinas sem SQL Server LocalDB:
 
-- Primeira execução com 42/43 verificações aprovadas.
-- Correção de um payload da sonda, seguida de reexecução direcionada com 8/8 aprovações.
-- Regressão posterior com 13/13 verificações aprovadas.
+```powershell
+dotnet test --filter "Categoria!=SqlServer"
+```
 
-Essas validações abrangeram fluxos de manutenção, integridade dos relacionamentos, restrições de unicidade, autenticação e atribuição concorrente de ordens de serviço.
+Atenção: sem LocalDB, esses 8 testes de SQL Server falham. Eles não são ignorados e nunca são marcados como aprovados — a falha é real e significa apenas que a validação contra o SQL Server não pôde rodar naquela máquina. Nesse cenário, utilize o filtro acima para executar os 106 casos de API.
 
-Não houve uma execução única final de 43/43 verificações, nem teste de carga.
+## Status de entrega
 
-A integração da versão final com o SQL Server definitivo do grupo e a demonstração ponta a ponta nesse ambiente ainda precisam ser realizadas após o alinhamento do esquema.
+### 1. Concluído e validado
 
-## Integração com a equipe
+- API completa: autenticação JWT, regras de negócio, contratos HTTP, Swagger e coleção Postman.
+- Modelo físico fechado e aprovado como banco oficial: 7 tabelas, 8 FKs `Restrict`, 6 índices únicos e a CHECK de tipo de origem.
+- Migration `20261020021711_InitialCreate` aplicada no banco oficial `SistemaManutencaoPIM`.
+- 114/114 testes aprovados (106 SQLite/API e 8 contra SQL Server real).
+- Documentação de banco publicada: DER, dicionário de dados e guia de banco de dados.
 
-Este repositório entrega a API utilizada pelos demais componentes do PIM.
+### 2. Pendente de autorização
 
-| Área | Responsabilidade |
-|---|---|
-| Banco de dados | Compatibilizar o esquema SQL Server e seus relacionamentos com a API |
-| Frontend React | Consumir os endpoints administrativos, autenticação e dashboard |
-| Aplicativo Flutter | Consumir login, ocorrências e fluxos de atendimento de OS |
+- A migration `20261023061811_OrdemServicoTipoOrigemCheck` ainda não foi aplicada no banco oficial.
+- A aplicação depende de auditoria prévia do banco e de decisão do grupo, conforme o procedimento de [Guia de banco de dados, seção 8.3](docs/GUIA_BANCO_INTEGRACAO.md).
+- Até lá, iniciar a API em Development com `Database:ApplyMigrationsOnStartup = "false"` (comando na seção de execução).
 
-A API utiliza suas próprias entidades e migrations. Antes da integração definitiva, o esquema precisa ser comparado com o modelo acordado pela equipe, incluindo chaves estrangeiras, índices e campos opcionais.
+### 3. Integrações futuras
 
-O guia de integração está disponível em:
+- Aplicar e validar a migration pendente no SQL Server definitivo do grupo.
+- Decidir e implementar as pendências D1 (continuidade da corretiva), D2 (preventiva não resolvida) e D11 (ocorrência pelo Administrador), documentadas em [Pendências e decisões](docs/PENDENCIAS_E_DECISOES.md).
+- Consumo efetivo pelos frontends React e Flutter, seguindo os contratos de [docs/CONTRATOS_API.md](docs/CONTRATOS_API.md) e [docs/openapi.json](docs/openapi.json).
+- Publicação e deploy do backend.
 
-[Integração do backend com a equipe](docs/ENTREGA_EQUIPE.md)
+## Segurança
+
+- O repositório não contém credenciais. Connection string, chave JWT (`Jwt:Key`) e credenciais do seed (`SeedAdmin:Email` e `SeedAdmin:Senha`) são fornecidas por configuração, em variáveis de ambiente ou user-secrets.
+- A autenticação usa JWT Bearer com expiração de token, e as permissões são verificadas por perfil em cada rota.
 
 ## Estrutura do repositório
 
@@ -306,8 +367,11 @@ SistemaManutencaoPIM/
 - [Contratos da API](docs/CONTRATOS_API.md): endpoints, permissões e exemplos JSON.
 - [OpenAPI](docs/openapi.json): especificação das operações.
 - [Coleção Postman](docs/SistemaManutencaoPIM.postman_collection.json): demonstração por requisições HTTP.
+- [DER e modelo físico](docs/DER_MODELO_FISICO.md): diagrama do esquema físico.
+- [Dicionário de dados](docs/DICIONARIO_DADOS.md): colunas, tipos, nulabilidade e domínios.
+- [Guia de banco de dados](docs/GUIA_BANCO_INTEGRACAO.md): configuração, migrations, backup e handoff.
 - [Guia de integração](docs/ENTREGA_EQUIPE.md): orientações para os integrantes da equipe.
 - [Roteiro de apresentação](docs/ROTEIRO_APRESENTACAO.md): sequência para demonstrar o projeto.
 - [Pendências e decisões](docs/PENDENCIAS_E_DECISOES.md): regras e alinhamentos ainda necessários.
 
-Este repositório contém somente o **Backend/API do PIM**. As aplicações React e Flutter, o banco compartilhado e sua integração definitiva fazem parte das demais etapas do projeto em grupo.
+Este repositório contém o **Backend e o Banco de Dados do PIM**. As aplicações React e Flutter e a integração definitiva com o banco do grupo fazem parte das demais etapas do projeto.
