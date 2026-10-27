@@ -16,4 +16,4 @@
 
 **Demonstração sugerida:** abrir Swagger, login de admin, criar setor, equipamento, operador e técnico, login do operador, registrar ocorrência, admin criar OS, login do técnico, assumir, iniciar, concluir e conferir o status do equipamento. Usar senhas e tokens próprios do ambiente de teste.
 
-**Se perguntarem o que falta:** "A base da API foi implementada. A compilação e integração completa dependem de instalar o .NET SDK e SQL Server na máquina, executar os testes e alinhar a extensão da OS preventiva com o responsável pelo banco."
+**Se perguntarem o que falta:** "A base da API está implementada, compilada e homologada: a suíte roda com 126 casos aprovados e as migrations já foram aplicadas e validadas no banco oficial local. O que falta é a homologação no banco compartilhado do grupo e a integração pelos frontends React e Flutter."

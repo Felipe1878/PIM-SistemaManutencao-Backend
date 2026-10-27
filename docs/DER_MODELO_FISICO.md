@@ -6,6 +6,8 @@
 **Data deste documento:** 23/10/2026
 **Escopo:** 7 tabelas, 8 chaves estrangeiras (todas `DeleteBehavior.Restrict`), 6 índices únicos (3 deles filtrados), 5 índices convencionais de FK e 1 CHECK constraint recém-aprovada.
 
+> **Inicialização versus DEFAULT SQL:** `Ativo=true` é inicialização das entidades C# (`Models/Entidades.cs`). A `InitialCreate` não define DEFAULT constraints para essas colunas no SQL Server. Um INSERT SQL direto deve fornecer `Ativo`; não recebe `true` automaticamente.
+
 > **Regra de ouro:** o banco EF Core é a base oficial do PIM. React e Flutter **nunca** acessam o SQL Server diretamente — somente via API (ver `docs/GUIA_BANCO_INTEGRACAO.md`).
 
 ---
@@ -23,13 +25,13 @@ erDiagram
         nvarchar_500 SenhaHash "NOT NULL - PBKDF2"
         int Perfil "NOT NULL - enum PerfilUsuario"
         int Funcao "NULL - enum FuncaoFuncionario"
-        bit Ativo "NOT NULL - default true"
+        bit Ativo "NOT NULL - inicial C# true; sem DEFAULT SQL"
     }
 
     Setores {
         int Id PK "Identity (1,1)"
         nvarchar_120 Nome UK "IX_Setores_Nome — unico com filtro Ativo = 1"
-        bit Ativo "NOT NULL - default true"
+        bit Ativo "NOT NULL - inicial C# true; sem DEFAULT SQL"
     }
 
     Equipamentos {
@@ -42,7 +44,7 @@ erDiagram
         datetime2 DataAquisicao "NULL"
         int Status "NOT NULL - enum StatusEquipamento"
         int SetorId FK "NOT NULL - FK1 para Setores"
-        bit Ativo "NOT NULL - default true"
+        bit Ativo "NOT NULL - inicial C# true; sem DEFAULT SQL"
     }
 
     Ocorrencias {
@@ -83,7 +85,7 @@ erDiagram
         int PeriodicidadeDias "NOT NULL"
         datetime2 UltimaExecucao "NULL"
         datetime2 ProximaExecucao "NOT NULL"
-        bit Ativo "NOT NULL - default true"
+        bit Ativo "NOT NULL - inicial C# true; sem DEFAULT SQL"
     }
 
     Setores ||--o{ Equipamentos : "FK1 Equipamentos.SetorId (Restrict)"
@@ -149,7 +151,7 @@ ALTER TABLE [OrdensServicos] ADD CONSTRAINT [CK_OrdensServicos_TipoOrigem] CHECK
 
 A CHECK é **complementar** ao índice único filtrado `IX_OrdensServicos_OcorrenciaId`: a CHECK impede OS sem origem ou com as duas origens; o índice impede duas OS para a mesma ocorrência. Juntos, eles tornam impossível no banco uma OS "órfã" (sem origem) ou "híbrida" (com as duas origens).
 
-> **Status de aplicação:** a migration incremental existe no repositório, mas **ainda não foi aplicada** no banco oficial `SistemaManutencaoPIM` — o `__EFMigrationsHistory` oficial contém apenas a `InitialCreate`. A aplicação deliberada (`dotnet ef database update`) e a validação no SQL Server do grupo seguem o fluxo de `docs/GUIA_BANCO_INTEGRACAO.md` (seções 8.2 e 8.3).
+> **Status de aplicação:** migration **aplicada e validada no banco oficial local** `SistemaManutencaoPIM` em 25/10/2026 (backup prévio verificado com `RESTORE VERIFYONLY`; `__EFMigrationsHistory` com as duas migrations; CHECK ativa e confiável — `is_disabled = 0`, `is_not_trusted = 0`; contagens de dados preservadas e hash do Administrador ID 1 inalterado). Permanece pendente apenas a aplicação/validação no **banco compartilhado do grupo**, seguindo `docs/GUIA_BANCO_INTEGRACAO.md` (seções 8.2 e 8.3).
 
 ---
 

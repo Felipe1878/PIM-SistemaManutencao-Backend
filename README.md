@@ -8,7 +8,7 @@ As aplicações web (React) e mobile (Flutter), desenvolvidas pelos demais integ
 
 Este repositório entrega o **Backend e o Banco de Dados do PIM**: código-fonte, migrations, modelo físico, testes e documentação de integração.
 
-O modelo físico aprovado pelo grupo vale como banco oficial do projeto (`SistemaManutencaoPIM`). Alterações de esquema passam a ser feitas apenas por migrations deste repositório, nunca por edição direta no banco.
+O modelo físico implementado neste repositório define o banco oficial local (`SistemaManutencaoPIM`). Alterações de esquema passam a ser feitas apenas por migrations deste repositório, nunca por edição direta no banco.
 
 ## Principais funcionalidades
 
@@ -34,7 +34,7 @@ A referência completa de endpoints está disponível em [Contratos da API](docs
 | Swagger / OpenAPI | Documentação dos endpoints |
 | Postman | Demonstração dos fluxos HTTP |
 | xUnit / WebApplicationFactory / SQLite | Testes automatizados de API |
-| xUnit / SQL Server real | Testes de integração da CHECK de tipo de origem |
+| xUnit / SQL Server real | Testes de integração da CHECK de tipo de origem e fluxos E2E ponta a ponta |
 
 A API mantém as regras de negócio nos serviços, enquanto os controllers recebem as requisições HTTP e os DTOs definem os contratos de entrada e saída.
 
@@ -56,7 +56,7 @@ O esquema físico definido neste repositório:
 - **6 índices únicos**, sendo 3 filtrados (parciais).
 - **CHECK `CK_OrdensServicos_TipoOrigem`:** ordem corretiva exige `OcorrenciaId` e não pode ter `PlanoManutencaoId`; ordem preventiva exige `PlanoManutencaoId` e não pode ter `OcorrenciaId`.
 
-Em relação ao modelo do DOCX da disciplina, o grupo aprovou as extensões abaixo, todas registradas no dicionário de dados:
+Em relação ao modelo do DOCX da disciplina, o backend implementa as extensões abaixo, registradas no dicionário de dados; não há evidência de aprovação formal do esquema completo pelo grupo:
 
 - `OrdemServico.OcorrenciaId` nullable, para permitir ordens preventivas sem ocorrência.
 - `OrdemServico.PlanoManutencaoId`, que registra a origem preventiva da ordem.
@@ -142,15 +142,17 @@ Duas migrations compõem o esquema atual:
 | Migration | Conteúdo | Situação no banco oficial |
 |---|---|---|
 | `20261020021711_InitialCreate` | Criação das 7 tabelas, 8 FKs, índices e constraints | Aplicada |
-| `20261023061811_OrdemServicoTipoOrigemCheck` | CHECK `CK_OrdensServicos_TipoOrigem` | Pendente de autorização |
+| `20261023061811_OrdemServicoTipoOrigemCheck` | CHECK `CK_OrdensServicos_TipoOrigem` | Aplicada e validada no banco oficial local (25/10/2026) |
 
-Para aplicar de forma controlada, com o banco alvo definido pela connection string:
+Situação por ambiente:
+
+1. **Banco oficial local `SistemaManutencaoPIM`:** as duas migrations estão aplicadas e validadas em 25/10/2026 — backup prévio verificado (`SistemaManutencaoPIM-20261025-020253.bak`, `RESTORE VERIFYONLY` OK), `__EFMigrationsHistory` com as duas entradas, CHECK ativa e confiável (`is_disabled = 0`, `is_not_trusted = 0`), contagens de dados preservadas e hash SHA-256 do Administrador ID 1 inalterado.
+2. **Esquema reproduzível:** em qualquer máquina nova, o comando abaixo aplica as duas migrations a partir do repositório.
+3. **Banco definitivo compartilhado do grupo:** ainda não homologado — a aplicação lá continua pendente, após auditoria prévia e alinhamento com o responsável pelo SQL Server, conforme o procedimento de [Guia de banco de dados, seção 8.3](docs/GUIA_BANCO_INTEGRACAO.md).
 
 ```powershell
 dotnet ef database update --project SistemaManutencao.API
 ```
-
-A segunda migration só deve ser aplicada no banco oficial após a auditoria prévia e a autorização do grupo, conforme o procedimento de [Guia de banco de dados, seção 8.3](docs/GUIA_BANCO_INTEGRACAO.md).
 
 ### 3. Iniciar a API
 
@@ -167,7 +169,7 @@ Se `SeedAdmin__Senha` não estiver configurada, solicita uma senha. O seed é id
 
 Se `Jwt__Key` não estiver definida, o script gera uma chave aleatória para a execução. Tokens gerados anteriormente deixam de funcionar quando a API é reiniciada com uma chave diferente.
 
-Atenção ao flag automático de migrations em Development. Com `Database:ApplyMigrationsOnStartup = true` (configuração atual de `appsettings.Development.json`), qualquer boot da API aplica todas as migrations pendentes no banco apontado pela connection string (`Program.cs:117-127`), incluindo a CHECK ainda não autorizada. Para iniciar sem aplicar migrations:
+Atenção ao flag automático de migrations em Development. Com `Database:ApplyMigrationsOnStartup = true` (configuração atual de `appsettings.Development.json`), qualquer boot da API aplica todas as migrations pendentes no banco apontado pela connection string (`Program.cs:117-127`). No banco oficial local as duas migrations já estão aplicadas e validadas; o cuidado permanece necessário para não migrar automaticamente outra base sem auditoria, em especial o banco definitivo compartilhado do grupo, ainda não homologado. Para iniciar sem aplicar migrations:
 
 ```powershell
 $env:Database__ApplyMigrationsOnStartup = "false"
@@ -287,14 +289,14 @@ Em outros ambientes, configure `Cors:Origens` conforme os endereços utilizados 
 
 ## Testes e validação
 
-A suíte tem **114 casos de teste, todos aprovados na última execução (114/114, 0 falhas, 0 ignorados)**, em duas camadas:
+A suíte tem **126 casos de teste, todos aprovados na última execução (126/126, 0 falhas, 0 ignorados)**, em duas camadas:
 
 | Camada | Casos | Recursos |
 |---|---|---|
-| API e regras de negócio | 106 | xUnit, `WebApplicationFactory` e SQLite em memória |
-| Integração com SQL Server real | 8 | Classe `SqlServerTipoOrigemCheckTests`, trait `Categoria=SqlServer` |
+| API, regras de negócio e segurança da fixture (2 regressões) | 108 | xUnit, `WebApplicationFactory` e SQLite em memória |
+| Integração com SQL Server real | 18 | Classe `SqlServerTipoOrigemCheckTests` (8 casos da CHECK) + 10 casos E2E ponta a ponta em `E2EApiSqlServerTests.cs` (3 classes: corretiva, preventiva, integridade/autorização), trait `Categoria=SqlServer` |
 
-Os 8 testes de SQL Server exercitam a CHECK `CK_OrdensServicos_TipoOrigem` em um banco descartável (`SistemaManutencaoPIM_ValidationTemp`), criado e removido pelos próprios testes.
+Os 18 testes de SQL Server rodam contra bancos descartáveis, nunca contra o oficial: `SistemaManutencaoPIM_ValidationTemp` (8 casos que exercitam a CHECK `CK_OrdensServicos_TipoOrigem`) e `SistemaManutencaoPIM_E2E_<GUID>` (10 casos E2E — 1 de fluxo corretivo, 2 de fluxo preventivo e 7 de integridade/autorização — que percorrem a API real, com migrations e seed aplicados pelo startup da própria API). Ambos são criados e removidos pelos próprios testes.
 
 ### Como rodar
 
@@ -310,30 +312,95 @@ Somente a camada SQLite/API, para máquinas sem SQL Server LocalDB:
 dotnet test --filter "Categoria!=SqlServer"
 ```
 
-Atenção: sem LocalDB, esses 8 testes de SQL Server falham. Eles não são ignorados e nunca são marcados como aprovados — a falha é real e significa apenas que a validação contra o SQL Server não pôde rodar naquela máquina. Nesse cenário, utilize o filtro acima para executar os 106 casos de API.
+Atenção: sem LocalDB, esses 18 testes de SQL Server falham. Eles não são ignorados e nunca são marcados como aprovados — a falha é real e significa apenas que a validação contra o SQL Server não pôde rodar naquela máquina. Nesse cenário, utilize o filtro acima para executar os 108 casos de API.
 
 ## Status de entrega
 
 ### 1. Concluído e validado
 
 - API completa: autenticação JWT, regras de negócio, contratos HTTP, Swagger e coleção Postman.
-- Modelo físico fechado e aprovado como banco oficial: 7 tabelas, 8 FKs `Restrict`, 6 índices únicos e a CHECK de tipo de origem.
-- Migration `20261020021711_InitialCreate` aplicada no banco oficial `SistemaManutencaoPIM`.
-- 114/114 testes aprovados (106 SQLite/API e 8 contra SQL Server real).
+- Modelo físico implementado e validado no banco oficial local (sem afirmar aprovação formal do grupo): 7 tabelas, 8 FKs `Restrict`, 6 índices únicos e a CHECK de tipo de origem.
+- Migrations `20261020021711_InitialCreate` e `20261023061811_OrdemServicoTipoOrigemCheck` aplicadas e validadas no banco oficial local `SistemaManutencaoPIM` em 25/10/2026: backup prévio verificado (`SistemaManutencaoPIM-20261025-020253.bak`, `RESTORE VERIFYONLY` OK), `__EFMigrationsHistory` com as duas migrations, CHECK com `is_disabled = 0` e `is_not_trusted = 0`, contagens preservadas e hash SHA-256 do Administrador ID 1 inalterado.
+- API validada em execução real contra o banco oficial local: health 200, login do Administrador 200, 11 GETs autenticados 200, controles sem token 401 e Swagger 200 — API iniciada sem migrations automáticas (`Database__ApplyMigrationsOnStartup=false`) e encerrada após os testes, com a porta 5088 liberada.
+- 126/126 testes aprovados (108 SQLite/API e 18 contra SQL Server real: 8 da CHECK + 10 E2E ponta a ponta).
 - Documentação de banco publicada: DER, dicionário de dados e guia de banco de dados.
 
 ### 2. Pendente de autorização
 
-- A migration `20261023061811_OrdemServicoTipoOrigemCheck` ainda não foi aplicada no banco oficial.
-- A aplicação depende de auditoria prévia do banco e de decisão do grupo, conforme o procedimento de [Guia de banco de dados, seção 8.3](docs/GUIA_BANCO_INTEGRACAO.md).
-- Até lá, iniciar a API em Development com `Database:ApplyMigrationsOnStartup = "false"` (comando na seção de execução).
+- No banco oficial local as duas migrations já estão aplicadas e validadas (25/10/2026); a pendência restante é aplicar e validar as migrations no **banco compartilhado do grupo**, mediante auditoria prévia e decisão do grupo, conforme o procedimento de [Guia de banco de dados, seção 8.3](docs/GUIA_BANCO_INTEGRACAO.md).
+- Em máquina nova não há pendência: o repositório contém as migrations e `dotnet ef database update --project SistemaManutencao.API` reproduz o esquema completo.
+- Até a homologação do banco compartilhado, continuar iniciando a API em Development com `Database:ApplyMigrationsOnStartup = "false"` (comando na seção de execução), para não migrar automaticamente nenhuma base sem auditoria.
 
 ### 3. Integrações futuras
 
-- Aplicar e validar a migration pendente no SQL Server definitivo do grupo.
+- Aplicar e validar as migrations no banco compartilhado do grupo (SQL Server definitivo), conforme [Guia de banco de dados, seção 8.3](docs/GUIA_BANCO_INTEGRACAO.md).
 - Decidir e implementar as pendências D1 (continuidade da corretiva), D2 (preventiva não resolvida) e D11 (ocorrência pelo Administrador), documentadas em [Pendências e decisões](docs/PENDENCIAS_E_DECISOES.md).
 - Consumo efetivo pelos frontends React e Flutter, seguindo os contratos de [docs/CONTRATOS_API.md](docs/CONTRATOS_API.md) e [docs/openapi.json](docs/openapi.json).
 - Publicação e deploy do backend.
+
+## Entrega ao líder
+
+Resumo do que está entregue neste repositório (Backend e Banco de Dados do PIM).
+
+### Escopo atendido
+
+- Backend/API completa e banco de dados: 7 tabelas, 8 chaves estrangeiras `Restrict`, 6 índices únicos e a CHECK `CK_OrdensServicos_TipoOrigem` de origem da ordem de serviço.
+- Migrations `20261020021711_InitialCreate` e `20261023061811_OrdemServicoTipoOrigemCheck` aplicadas e validadas no banco oficial local `SistemaManutencaoPIM` (25/10/2026).
+
+### Tecnologias
+
+- C# / ASP.NET Core 8 (API REST).
+- Entity Framework Core 8.0.11 (persistência, relacionamentos e migrations).
+- SQL Server, com LocalDB em desenvolvimento.
+- JWT Bearer (autenticação e autorização por perfil).
+- Swagger / OpenAPI (documentação dos endpoints).
+- xUnit (testes automatizados).
+
+### Funcionalidades implementadas
+
+- Autenticação JWT e controle de acesso por perfil (Administrador, Operador, Técnico).
+- Gestão administrativa de usuários, setores e equipamentos.
+- Registro e consulta de ocorrências com filtros.
+- Ordens de serviço corretivas (vinculadas a ocorrência) e preventivas (a partir de plano).
+- Manutenção com diagnóstico, serviço realizado, observações e `problemaResolvido` na conclusão.
+- Dashboard administrativo.
+- Integridade no banco: FKs `Restrict`, índices únicos, CHECK de origem da OS e regras de estado nos serviços.
+
+### Resultados de testes efetivamente executados
+
+- Suíte automatizada: **126/126 aprovados** (108 SQLite/API + 18 contra SQL Server real: 8 da CHECK `CK_OrdensServicos_TipoOrigem` + 10 E2E ponta a ponta em `SistemaManutencaoPIM_E2E_<GUID>`).
+- E2E ponta a ponta contra SQL Server LocalDB real (10 casos no arquivo `E2EApiSqlServerTests.cs`): fluxo corretivo completo (ocorrência → OS → assumir → iniciar → manutenção → concluir → ocorrência Resolvida/equipamento Funcionando), fluxo preventivo com e sem resolução (atualização do plano e D2 documentada), e integridade/autorização (409 patrimônio duplicado, 409 ocorrência ativa duplicada, 409 OS duplicada, 400 DTO incorreto, 403 Operador→setor, 403 Técnico→OS, 401 sem JWT).
+- Isolamento: a fixture E2E cria `SistemaManutencaoPIM_E2E_<GUID>` exclusivo por execução, sem drop inicial. O cleanup exige ownership após CREATE bem-sucedido e confere nome, `database_id` e `create_date` via `master`; recusa banco preexistente/substituído e também executa em falhas de startup. Os 8 testes da CHECK usam `SistemaManutencaoPIM_ValidationTemp`. Nenhum teste aponta escrita para o banco oficial.
+- Validação da API em execução real contra o banco oficial local: health 200, login do Administrador 200, 11 GETs autenticados 200 e controles sem token 401 (Swagger 200).
+- Backup pré-migration verificado: `SistemaManutencaoPIM-20261025-020253.bak` com `RESTORE VERIFYONLY` OK, contagens de dados preservadas e hash SHA-256 do Administrador ID 1 inalterado. O arquivo de backup fica fora do repositório, em `C:\Users\andre\AppData\Local\PIMBackups\` (junto do de 21/10/2026), para auditoria posterior.
+
+### Como iniciar e demonstrar
+
+- **Restaurar e compilar:** passo 1 da seção [Instalação e execução](#instalação-e-execução) (`dotnet restore` / `dotnet build`).
+- **Migrations:** passo 2 da mesma seção (`dotnet ef database update`).
+- **Iniciar a API:** passo 3 (`scripts/iniciar-dev.ps1`), com Swagger em `http://localhost:5088/swagger`.
+- **Demonstração guiada:** seção [Testando pelo Swagger](#testando-pelo-swagger) e [coleção Postman](docs/SistemaManutencaoPIM.postman_collection.json) (21 requisições em sequência).
+
+### Como reproduzir o banco
+
+Em base nova, basta `dotnet ef database update --project SistemaManutencao.API`: o repositório contém as migrations que definem todo o esquema (detalhes em [Guia de banco de dados, seção 3](docs/GUIA_BANCO_INTEGRACAO.md)).
+
+### O que depende de Gustavo (React) e Marcos (Flutter)
+
+Consumo da API pelos frontends conforme [docs/CONTRATOS_API.md](docs/CONTRATOS_API.md) e [docs/openapi.json](docs/openapi.json), com apoio do Swagger e da coleção Postman. A integração real ainda **não foi realizada**.
+
+### Decisões pendentes do grupo (D1, D2 e D11)
+
+Em D1 e D2, distinguir dois níveis:
+
+- **Comportamento do DOCX já implementado:** conclusão com `problemaResolvido` `true`/`false` (estados resultantes da ocorrência e do equipamento) e preventiva sem OS automática no MVP.
+- **Continuidade operacional ainda não especificada:** o que fazer quando `problemaResolvido = false` (reabertura, nova OS, novo atendimento) e o destino da preventiva não resolvida.
+
+D11 (ocorrência registrada pelo Administrador) aguarda ratificação do grupo. Detalhes em [Pendências e decisões](docs/PENDENCIAS_E_DECISOES.md).
+
+### Limites desta entrega
+
+A entrega cobre o Backend e o Banco de Dados. Não representa aprovação formal do grupo nem homologação de 100% do sistema completo: os frontends React e Flutter ainda não estão integrados, e o banco compartilhado do grupo segue o procedimento da seção 8.3 do [guia de banco de dados](docs/GUIA_BANCO_INTEGRACAO.md).
 
 ## Segurança
 

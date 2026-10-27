@@ -60,14 +60,14 @@ Esperado: 7 tabelas de negócio (`Usuarios`, `Setores`, `Equipamentos`, `Ocorren
 
 Em **Development**, com `appsettings.Development.json` contendo `Database:ApplyMigrationsOnStartup = true`, o `Program.cs` executa na inicialização:
 
-1. `db.Database.MigrateAsync()` — aplica toda migration pendente (na máquina nova: cria o banco e roda `InitialCreate`);
+1. `db.Database.MigrateAsync()` — aplica toda migration pendente (na máquina nova: cria o banco e aplica ambas: `InitialCreate` e `OrdemServicoTipoOrigemCheck`);
 2. `DbInitializer.CriarAdministradorInicialAsync(...)` — **seed idempotente** do administrador: cria o usuário inicial **somente se a tabela `Usuarios` estiver vazia** (e-mail/senha vêm de configuração `SeedAdmin:*`, nunca hardcoded; o script `scripts/iniciar-dev.ps1` orquestra isso em dev).
 
 Em **produção** (`appsettings.json`) o flag é `false`: migrations são aplicadas por processo controlado (2.1), não no boot da API. Nunca ligue `ApplyMigrationsOnStartup` em produção.
 
 > **⚠️ Risco de migração automática — leia antes de subir a API em Development:**
 >
-> Com `ASPNETCORE_ENVIRONMENT=Development` e `Database:ApplyMigrationsOnStartup = true`, **qualquer boot da API aplica TODAS as migrations pendentes no banco apontado pela connection string** (`Program.cs:117-127`: `MigrateAsync()` + seed do administrador). Inclui a migration incremental `20261023061811_OrdemServicoTipoOrigemCheck` (CHECK `CK_OrdensServicos_TipoOrigem`), que **ainda não foi aplicada no banco oficial `SistemaManutencaoPIM`**. Ou seja: subir a API em Development sem cuidado aplicaria a migration no banco oficial sem auditoria prévia e sem decisão do grupo.
+> Com `ASPNETCORE_ENVIRONMENT=Development` e `Database:ApplyMigrationsOnStartup = true`, **qualquer boot da API aplica TODAS as migrations pendentes no banco apontado pela connection string** (`Program.cs:117-127`: `MigrateAsync()` + seed do administrador). No banco oficial local `SistemaManutencaoPIM` as duas migrations já estão aplicadas e validadas (25/10/2026); o risco atual é apontar o boot para qualquer outra base — em especial o banco compartilhado do grupo, ainda não homologado — e migrá-la automaticamente, sem auditoria prévia e sem decisão do grupo.
 >
 > **Procedimento seguro para iniciar a API SEM migrar:**
 >
@@ -77,7 +77,7 @@ Em **produção** (`appsettings.json`) o flag é `false`: migrations são aplica
 > dotnet run --project SistemaManutencao.API
 > ```
 >
-> Alternativas equivalentes: `dotnet run --project SistemaManutencao.API -- --Database:ApplyMigrationsOnStartup=false` (argumento de linha de comando) ou desligar o flag permanentemente em `appsettings.Development.json` enquanto a migration da CHECK não estiver autorizada. Em qualquer caso, aplique a migration de forma **deliberada** com `dotnet ef database update --project SistemaManutencao.API`, somente **depois** da auditoria pré-aplicação (seção 8.3, passo 4). Nunca aponte o boot em Development para a base do grupo com o flag ligado.
+> Alternativas equivalentes: `dotnet run --project SistemaManutencao.API -- --Database:ApplyMigrationsOnStartup=false` (argumento de linha de comando) ou desligar o flag permanentemente em `appsettings.Development.json` enquanto o banco compartilhado do grupo não estiver homologado. Em qualquer caso, aplique migrations de forma **deliberada** com `dotnet ef database update --project SistemaManutencao.API` — no banco oficial local isso já foi feito e validado (25/10/2026); em outras bases, somente **depois** da auditoria pré-aplicação (seção 8.3, passo 4). Nunca aponte o boot em Development para a base do grupo com o flag ligado.
 
 > O seed cria apenas o administrador. Os demais dados (setores, equipamentos, planos) são cadastrados pelos endpoints administrativos.
 
@@ -100,9 +100,9 @@ dotnet ef database update --project SistemaManutencao.API
 .\scripts\iniciar-dev.ps1
 ```
 
-O esquema resultante é **definido exclusivamente pelas migrations** (`Migrations/20261020021711_InitialCreate.cs` + a incremental `20261023061811_OrdemServicoTipoOrigemCheck`, ainda pendente de aplicação no banco oficial, + incrementais futuras). A criação segue a ordem de dependências das FKs: `Setores` → `Usuarios` → `Equipamentos` → `Ocorrencias` → `PlanosManutencao` → `OrdensServicos` → `Manutencoes`. Nenhum script SQL manual faz parte do setup oficial.
+O esquema resultante é **definido exclusivamente pelas migrations** (`Migrations/20261020021711_InitialCreate.cs` + a incremental `20261023061811_OrdemServicoTipoOrigemCheck`, aplicada e validada no banco oficial local em 25/10/2026, + incrementais futuras). A criação segue a ordem de dependências das FKs: `Setores` → `Usuarios` → `Equipamentos` → `Ocorrencias` → `PlanosManutencao` → `OrdensServicos` → `Manutencoes`. Nenhum script SQL manual faz parte do setup oficial.
 
-> **Testes:** a suíte (xUnit, 114 casos — 106 SQLite/API + 8 de integração SQL Server real na classe `SqlServerTipoOrigemCheckTests`) usa SQLite in-memory, `WebApplicationFactory` e LocalDB para comprovar a CHECK no SGBD — sempre no banco descartável `SistemaManutencaoPIM_ValidationTemp`, nunca no oficial. A validação em SQL Server do grupo é o passo de homologação (seção 8). Os 8 casos SQL Server (trait `Categoria=SqlServer`) exigem LocalDB e **falham sem ela**; para executar apenas a suíte SQLite/API: `dotnet test --filter "Categoria!=SqlServer"`.
+> **Testes:** a suíte (xUnit, 126 casos — 108 SQLite/API + 18 de integração SQL Server real) usa SQLite in-memory, `WebApplicationFactory` e LocalDB para comprovar a CHECK no SGBD e os fluxos E2E ponta a ponta — sempre em bancos descartáveis (`SistemaManutencaoPIM_ValidationTemp` na classe `SqlServerTipoOrigemCheckTests` e `SistemaManutencaoPIM_E2E_<GUID>` na suíte `E2EApiSqlServerTests`), nunca no oficial. A validação em SQL Server do grupo é o passo de homologação (seção 8). Os 18 casos SQL Server (trait `Categoria=SqlServer`) exigem LocalDB e **falham sem ela**; para executar apenas a suíte SQLite/API: `dotnet test --filter "Categoria!=SqlServer"`.
 
 ---
 
@@ -119,7 +119,7 @@ Fluxo aprovado (do DOCX do grupo) para qualquer mudança de schema:
 5. **Aplicar** — `dotnet ef database update` (ou boot em Development com o flag ligado);
 6. **Testar** — validar integridade no SQL Server real (seção 8) e rodar a suíte.
 
-A CHECK `CK_OrdensServicos_TipoOrigem` seguiu exatamente esse fluxo até a etapa de aplicação: a migration incremental (`20261023061811_OrdemServicoTipoOrigemCheck`, classe `OrdemServicoTipoOrigemCheck` com `AddCheckConstraint`/`DropCheckConstraint`) **não toca na `InitialCreate`** — é uma nova classe `Up()/Down()` acrescentando a constraint na tabela `OrdensServicos`; aplicação (`dotnet ef database update`) e validação (seção 8.3) seguem pendentes.
+A CHECK `CK_OrdensServicos_TipoOrigem` seguiu exatamente esse fluxo: a migration incremental (`20261023061811_OrdemServicoTipoOrigemCheck`, classe `OrdemServicoTipoOrigemCheck` com `AddCheckConstraint`/`DropCheckConstraint`) **não toca na `InitialCreate`** — é uma nova classe `Up()/Down()` acrescentando a constraint na tabela `OrdensServicos`; aplicada via `dotnet ef database update` e validada no banco oficial local em 25/10/2026 (o mesmo procedimento da seção 8.3 permanece para o banco compartilhado do grupo).
 
 ---
 
@@ -201,14 +201,14 @@ As decisões **D1**, **D2** e **D11** permanecem abertas em `docs/PENDENCIAS_E_D
 - **D2 — preventiva não resolvida:** OS preventiva concluída deixa o equipamento Parado sem continuidade pelo fluxo atual; regra a definir (sem ocorrência fictícia);
 - **D11 — ocorrência pelo administrador:** POST/GET de ocorrências aceitam Administrador e Operador; ratificar ou restringir.
 
-Também permanece válida a nota de compatibilidade com Léo: as extensões (`OcorrenciaId` nullable, `PlanoManutencaoId`, `ProblemaResolvido`) e a CHECK nova precisam de aprovação do grupo antes da integração com o banco compartilhado definitivo (ver `docs/DICIONARIO_DADOS.md`, seção 10).
+Também permanece válida a nota de compatibilidade com o banco compartilhado: as extensões (`OcorrenciaId` nullable, `PlanoManutencaoId`, `ProblemaResolvido`) e a CHECK nova precisam de aprovação do grupo antes da integração com o banco compartilhado definitivo (ver `docs/DICIONARIO_DADOS.md`, seção 10).
 
 ### 8.2 Status da CHECK nova
 
 - **Definição:** `CK_OrdensServicos_TipoOrigem` — corretiva (0) exige `OcorrenciaId NOT NULL` e `PlanoManutencaoId NULL`; preventiva (1) exige `PlanoManutencaoId NOT NULL` e `OcorrenciaId NULL` (SQL completo em `docs/DER_MODELO_FISICO.md` §4 e `docs/DICIONARIO_DADOS.md` §8).
 - **Aprovação:** 23/10/2026.
-- **Estado:** definida, aprovada e materializada na migration incremental `20261023061811_OrdemServicoTipoOrigemCheck` (nova classe, gerada pelo responsável do banco; **não altera a `InitialCreate`** — migrations antigas nunca são editadas). Pendente apenas de aplicação (`dotnet ef database update`) e validação no SQL Server do grupo.
-- **Impacto em dados existentes:** qualquer linha atual de `OrdensServicos` que viole a regra impedirá a aplicação da migration — rodar uma consulta de auditoria antes (seção 8.3, passo 4) e corrigir dados por API/decisão do grupo, nunca por DDL manual.
+- **Estado:** definida, aprovada e materializada na migration incremental `20261023061811_OrdemServicoTipoOrigemCheck` (nova classe, gerada pelo responsável do banco; **não altera a `InitialCreate`** — migrations antigas nunca são editadas). Aplicada via `dotnet ef database update` e validada no banco oficial local `SistemaManutencaoPIM` em 25/10/2026 (backup prévio verificado, CHECK ativa e confiável — `is_disabled = 0`, `is_not_trusted = 0` —, contagens de dados preservadas). Pendente apenas de aplicação e validação no banco compartilhado do grupo (seção 8.3).
+- **Impacto em dados existentes:** qualquer linha de `OrdensServicos` que viole a regra impedirá a aplicação da migration na base alvo — no banco oficial local a aplicação já ocorreu sem impedimentos (25/10/2026); para o banco compartilhado do grupo, rodar a consulta de auditoria antes (seção 8.3, passo 4) e corrigir dados por API/decisão do grupo, nunca por DDL manual.
 
 ### 8.3 Passos para o grupo validar em SQL Server próprio
 
@@ -223,11 +223,11 @@ Também permanece válida a nota de compatibilidade com Léo: as extensões (`Oc
            OR (TipoManutencao = 1 AND PlanoManutencaoId IS NOT NULL AND OcorrenciaId IS NULL));
    ```
    Zero linhas = seguro aplicar a CHECK.
-5. **Aplicar a migration incremental** da CHECK já gerada (`dotnet ef database update`) e confirmar:
+5. **Aplicar a migration incremental** da CHECK já gerada (`dotnet ef database update`) e confirmar (passo já executado e validado no banco oficial local `SistemaManutencaoPIM` em 25/10/2026; na base do grupo, executar após a auditoria do passo 4):
    ```sql
    SELECT name FROM sys.check_constraints WHERE name = 'CK_OrdensServicos_TipoOrigem';
    ```
-6. **Smoke test de integridade:** tentar via Swagger `POST` de OS sem origem nenhuma e uma OS com as duas origens — ambas devem ser rejeitadas (409 pela API; erro de CHECK se inserção direta).
+6. **Smoke test de integridade:** tentar via Swagger `POST` de OS sem origem nenhuma e uma OS com as duas origens — ambas devem retornar **HTTP 400** pela validação da API. **409** é reservado a conflitos (por exemplo, ocorrência que já possui OS). Uma inserção SQL direta com origem inválida é rejeitada pela CHECK no SQL Server; não se trata de uma resposta HTTP da validação da API.
 7. **Fluxo ponta a ponta:** executar o roteiro do README (login → setor → equipamento → ocorrência → OS corretiva → assumir/iniciar → registrar manutenção → concluir com `problemaResolvido` SIM e NÃO) e conferir os estados de ocorrência/equipamento resultantes.
 8. **Registrar o resultado** (schema conferido, CHECK aplicada, smoke tests) e comunicar ao responsável pelo SQL Server antes de qualquer promoção para a base do grupo.
 
